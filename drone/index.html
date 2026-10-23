@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="FPV">
+<meta name="theme-color" content="#0b0d0c">
+<title>FPV: Последняя миля</title>
+<style>
+:root { --acc: #ffae1a; --bg: rgba(10,12,11,0.82); --line: rgba(255,255,255,0.14); --sl: env(safe-area-inset-left, 0px); --sr: env(safe-area-inset-right, 0px); --sb: env(safe-area-inset-bottom, 0px); }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0d0c; color: #eee; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; touch-action: none; overscroll-behavior: none; }
+#c { position: fixed; left: 0; top: 0; display: block; }
+#loading { position: fixed; inset: 0; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; font: bold 18px "Courier New", monospace; letter-spacing: 2px; z-index: 50; background: #0b0d0c; }
+#loading b { color: var(--acc); }
+.screen { position: fixed; top: 0; left: 0; right: 0; bottom: 0; display: none; flex-direction: column; align-items: center; z-index: 20; overflow-y: auto; -webkit-overflow-scrolling: touch; touch-action: pan-y; padding: 12px calc(16px + var(--sr)) calc(12px + var(--sb)) calc(16px + var(--sl)); }
+#menu { background: linear-gradient(180deg, rgba(5,7,6,0.35), rgba(5,7,6,0.85)); }
+.title { font: 900 clamp(26px, 6vh, 46px)/1 "Arial Black", Impact, sans-serif; letter-spacing: 2px; margin: 6px 0 2px; text-shadow: 0 3px 0 #000; text-align: center; }
+.title span { color: var(--acc); }
+.subt { font: 12px "Courier New", monospace; opacity: 0.75; margin-bottom: 10px; text-align: center; }
+.wrap { width: 100%; max-width: 980px; }
+h3 { font: bold 11px "Courier New", monospace; letter-spacing: 3px; color: var(--acc); margin: 8px 0 6px; }
+.grid { display: -webkit-box; display: flex; flex-wrap: wrap; margin: 0 -4px; }
+.card, .dcard { flex: 1 1 30%; min-width: 140px; margin: 4px; padding: 9px 10px; border: 1px solid var(--line); background: var(--bg); border-radius: 8px; cursor: pointer; transition: border-color .15s, transform .15s; }
+.dcard { flex-basis: 22%; min-width: 120px; }
+.card b, .dcard b { display: block; font: bold 14px "Courier New", monospace; letter-spacing: 1px; }
+.card span, .dcard span { display: block; font-size: 11px; opacity: 0.7; margin-top: 3px; line-height: 1.3; }
+.card i { display: block; font: 10px "Courier New", monospace; color: var(--acc); margin-top: 4px; font-style: normal; }
+.card.on, .dcard.on { border-color: var(--acc); box-shadow: 0 0 0 1px var(--acc) inset; }
+.card:active, .dcard:active { transform: scale(0.97); }
+.opts { display: flex; flex-wrap: wrap; margin: 6px -4px 0; }
+.opt { margin: 4px; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); font: bold 11px "Courier New", monospace; cursor: pointer; }
+.big { display: block; margin: 12px auto 4px; padding: 14px 46px; font: 900 20px "Arial Black", Impact, sans-serif; letter-spacing: 3px; color: #111; background: var(--acc); border: 0; border-radius: 10px; cursor: pointer; box-shadow: 0 4px 0 #8a5a00; }
+.big:active { transform: translateY(3px); box-shadow: 0 1px 0 #8a5a00; }
+#start { position: fixed; right: calc(16px + var(--sr)); bottom: calc(10px + var(--sb)); margin: 0; z-index: 25; padding: 12px 34px; }
+#menu { padding-bottom: 76px; }
+@media (max-height: 520px) { .dcard span { display: none; } .help { margin-right: 170px; text-align: left; } .opts { margin-right: 160px; } .card, .dcard { padding: 6px 8px; } .card span, .dcard span { font-size: 10px; } .title { margin-top: 0; } h3 { margin: 4px 0 2px; } .subt { margin-bottom: 4px; } }
+.help { font: 11px/1.5 "Courier New", monospace; opacity: 0.65; margin: 8px 0 18px; text-align: center; }
+#a2hs { display: none; font-size: 11px; opacity: 0.7; text-align: center; margin-top: 4px; }
+#hud { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 5; pointer-events: none; }
+#hudc { position: absolute; left: 0; top: 0; }
+#touch { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 6; touch-action: none; }
+.stick-base { position: absolute; width: 130px; height: 130px; margin: -65px 0 0 -65px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.6); background: rgba(0,0,0,0.18); pointer-events: none; opacity: 0.25; }
+.stick-base.sl { left: calc(18% + var(--sl)); top: 72%; }
+.stick-base.sr { left: calc(82% - var(--sr)); top: 72%; }
+.knob { position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; border-radius: 50%; background: rgba(255,255,255,0.55); transform: translate(-50%,-50%); }
+.stick-base .lbl { position: absolute; width: 100%; top: -18px; text-align: center; font: bold 10px "Courier New", monospace; opacity: 0.9; }
+.btn { position: absolute; z-index: 7; display: flex; align-items: center; justify-content: center; border-radius: 50%; border: 2px solid rgba(255,255,255,0.5); background: rgba(0,0,0,0.35); color: #fff; font: bold 11px "Courier New", monospace; touch-action: none; cursor: pointer; }
+#bFire { right: calc(20px + var(--sr)); bottom: calc(46% + 10px); width: 76px; height: 76px; background: rgba(200,30,20,0.55); border-color: rgba(255,120,100,0.9); font-size: 12px; }
+#bCam { right: calc(110px + var(--sr)); top: 12px; width: 50px; height: 50px; top: auto; bottom: calc(46% + 22px); }
+#bMode { right: calc(20px + var(--sr)); top: 64px; width: 50px; height: 50px; font-size: 9px; top: auto; bottom: calc(46% + 96px); }
+#bPause { left: calc(50% - 22px); top: auto; bottom: calc(6px + var(--sb)); width: 44px; height: 44px; border-radius: 10px; font-size: 14px; left: calc(50% + 120px); }
+.desktop .btn { opacity: 0.6; }
+#toasts { position: fixed; top: 22%; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; z-index: 8; pointer-events: none; }
+.toast { font: bold 14px "Courier New", monospace; padding: 5px 12px; margin: 3px; background: rgba(0,0,0,0.55); border-left: 3px solid #fff; transition: opacity .6s, transform .6s; max-width: 86vw; text-align: center; }
+.toast.good { border-color: #6f6; color: #cfc; }
+.toast.bad { border-color: #f54; color: #fcc; }
+.toast.big { font-size: 16px; border-color: var(--acc); }
+.toast.out { opacity: 0; transform: translateY(-12px); }
+#pause, #result { background: rgba(0,0,0,0.7); justify-content: center; }
+#resTitle { font: 900 34px "Arial Black", Impact, sans-serif; letter-spacing: 2px; margin-bottom: 10px; }
+#resTitle.win { color: #8f8; } #resTitle.lose { color: #f65; }
+#resBody { font: 15px/1.7 "Courier New", monospace; text-align: center; }
+.row { display: flex; flex-wrap: wrap; justify-content: center; }
+.row .big { margin: 12px 8px; padding: 12px 26px; font-size: 16px; }
+.big.alt { background: #ddd; box-shadow: 0 4px 0 #777; }
+#rotate { position: fixed; top: 0; left: 0; right: 0; bottom: 0; display: none; z-index: 60; background: #0b0d0c; align-items: center; justify-content: center; flex-direction: column; font: bold 16px "Courier New", monospace; text-align: center; padding: 20px; }
+#rotate .ph { width: 46px; height: 80px; border: 3px solid var(--acc); border-radius: 8px; margin-bottom: 16px; -webkit-animation: rot 1.8s infinite; animation: rot 1.8s infinite; }
+@-webkit-keyframes rot { 0%,30% { -webkit-transform: rotate(0); } 60%,100% { -webkit-transform: rotate(90deg); } }
+@keyframes rot { 0%,30% { transform: rotate(0); } 60%,100% { transform: rotate(90deg); } }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="loading">СБОРКА ПОСЁЛКА&nbsp;<b>▮▮▮</b></div>
+
+<div id="menu" class="screen">
+  <div class="title">FPV: <span>ПОСЛЕДНЯЯ МИЛЯ</span></div>
+  <div class="subt">симулятор FPV-дрона · дома, техника, РЭБ, оптоволокно</div>
+  <div class="wrap">
+    <h3>РЕЖИМ</h3>
+    <div class="grid" id="modes"></div>
+    <h3>ДРОН</h3>
+    <div class="grid" id="drones"></div>
+    <div class="opts">
+      <div class="opt" id="optFlight"></div>
+      <div class="opt" id="optAnalog"></div>
+      <div class="opt" id="optSens"></div>
+      <div class="opt" id="optSound"></div>
+      <div class="opt" id="optQ"></div>
+      <div class="opt" id="fs">НА ВЕСЬ ЭКРАН</div>
+    </div>
+    <button class="big" id="start">ВЗЛЁТ</button>
+    <div id="a2hs">совет: «Поделиться → На экран Домой» — игра откроется без панелей Safari</div>
+    <div class="help">
+      левый стик: газ ↕ и поворот ↔ · правый стик: наклоны · ANGLE — стабилизация и удержание высоты, ACRO — как настоящий FPV<br>
+      ПК: W/S газ, A/D поворот, стрелки наклон, ПРОБЕЛ подрыв/сброс, C камера, F режим, P пауза, R рестарт · геймпад тоже работает<br>
+      влетай в дома через окна и двери, бей танки в крышу и корму, держись подальше от ЗСУ, РЭБ глушит сигнал — оптоволокну он не страшен
+    </div>
+  </div>
+</div>
+
+<div id="hud"><canvas id="hudc"></canvas></div>
+<div id="touch">
+  <div class="stick-base sl" id="baseL"><div class="lbl">ГАЗ / ПОВОРОТ</div><div class="knob" id="knobL"></div></div>
+  <div class="stick-base sr" id="baseR"><div class="lbl">НАКЛОН</div><div class="knob" id="knobR"></div></div>
+  <div class="btn" id="bFire">ПОДРЫВ</div>
+  <div class="btn" id="bCam">КАМ</div>
+  <div class="btn" id="bMode">ANGLE</div>
+  <div class="btn" id="bPause">❚❚</div>
+</div>
+<div id="toasts"></div>
+
+<div id="pause" class="screen">
+  <div class="title">ПАУЗА</div>
+  <div class="row"><button class="big" id="resume">ДАЛЬШЕ</button><button class="big alt" id="quit">В МЕНЮ</button></div>
+</div>
+<div id="result" class="screen">
+  <div id="resTitle"></div>
+  <div id="resBody"></div>
+  <div class="row"><button class="big" id="again">ЕЩЁ РАЗ</button><button class="big alt" id="toMenu">В МЕНЮ</button></div>
+</div>
+<div id="rotate"><div class="ph"></div>поверни телефон горизонтально</div>
+<script src="game.js"></script>
+</body>
+</html>
