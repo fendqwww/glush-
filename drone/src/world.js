@@ -29,6 +29,7 @@ export class World {
     this.buildForest();
     this.buildWires();
     this.buildWarProps();
+    this.buildGrass();
     this.flush();
   }
 
@@ -403,7 +404,14 @@ export class World {
     }
     const topY = floors * FH;
     const roofMat = [this.mats.roofA, this.mats.roofB, this.mats.roofC][Math.floor(rand() * 3)];
-    if (floors === 1 || rand() < 0.5) this.gableRoof(L, roofMat, ext, W + 0.8, D + 0.8, topY + 0.25, 2.2 + rand());
+    if (floors === 1 || rand() < 0.5) {
+      const rh = 2.2 + rand();
+      this.gableRoof(L, roofMat, ext, W + 0.8, D + 0.8, topY + 0.25, rh);
+      // печная труба
+      const cx = (rand() < 0.5 ? -1 : 1) * W / 4;
+      this.lbox(L, this.mats.brickRed, cx, topY + 0.25 + rh * 0.75, -0.6, 0.6, rh * 1.1, 0.6, true);
+      this.lbox(L, this.mats.concrete, cx, topY + 0.25 + rh * 1.3, -0.6, 0.75, 0.1, 0.75, false);
+    }
     else {
       // плоская крыша с парапетом
       this.lbox(L, this.mats.concrete, 0, topY + 0.55, D / 2, W, 0.6, 0.25, true);
@@ -820,6 +828,65 @@ export class World {
     this.scene.add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0x111111 })));
   }
 
+  // трава пучками вокруг камеры (сетка мира, чтобы пучки не прыгали)
+  buildGrass() {
+    const S = 64, c = document.createElement('canvas'); c.width = S; c.height = S;
+    const x = c.getContext('2d');
+    for (let i = 0; i < 26; i++) {
+      const bx = 4 + Math.random() * (S - 8), h = S * (0.45 + Math.random() * 0.55);
+      x.strokeStyle = `hsl(${62 + Math.random() * 22},${28 + Math.random() * 16}%,${18 + Math.random() * 14}%)`;
+      x.lineWidth = 1.5 + Math.random() * 1.5;
+      x.beginPath(); x.moveTo(bx, S); x.quadraticCurveTo(bx + (Math.random() - 0.5) * 8, S - h * 0.6, bx + (Math.random() - 0.5) * 16, S - h); x.stroke();
+    }
+    const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+    const parts = [];
+    for (let k = 0; k < 2; k++) { const p = new THREE.PlaneGeometry(0.9, 0.55); p.translate(0, 0.27, 0); p.rotateY(k * Math.PI / 2); parts.push(p); }
+    const g = mergeGeometries(parts);
+    const n = g.attributes.normal; for (let i = 0; i < n.count; i++) n.setXYZ(i, 0, 1, 0);
+    const mat = new THREE.MeshStandardMaterial({ map: tex, alphaTest: 0.45, side: THREE.DoubleSide, roughness: 1 });
+    this.grassCell = 1.7;
+    this.grassR = this.quality > 0 ? 34 : 26;
+    const side = Math.ceil(this.grassR * 2 / this.grassCell);
+    this.grass = new THREE.InstancedMesh(g, mat, side * side);
+    this.grass.frustumCulled = false;
+    this.grass.receiveShadow = true;
+    this.grass.count = 0;
+    this.scene.add(this.grass);
+    this.grassAt = null;
+  }
+
+  updateGrass(p) {
+    if (!this.grass) return;
+    const C = this.grassCell;
+    const cx = Math.round(p.x / 8), cz = Math.round(p.z / 8);
+    if (p.y > 60) { this.grass.visible = false; return; }
+    this.grass.visible = true;
+    if (this.grassAt && this.grassAt[0] === cx && this.grassAt[1] === cz) return;
+    this.grassAt = [cx, cz];
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), v = new THREE.Vector3(), Y = new THREE.Vector3(0, 1, 0);
+    const R = this.grassR, x0 = Math.floor((p.x - R) / C), z0 = Math.floor((p.z - R) / C), N = Math.ceil(R * 2 / C);
+    let n = 0;
+    for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+      const gi = x0 + i, gj = z0 + j;
+      const h = hash(gi, gj);
+      if (h > 0.8) continue;
+      const wx = (gi + hash(gj, gi)) * C, wz = (gj + hash(gi + 7, gj + 3)) * C;
+      const dx = wx - p.x, dz = wz - p.z;
+      if (dx * dx + dz * dz > R * R) continue;
+      if (ROADS.some(r => Math.abs(wx - r) < 5.6 || Math.abs(wz - r) < 5.6)) continue;
+      if (Math.abs(wx) < 51 && Math.abs(wz) < 51) continue; // бетон промзоны
+      v.set(wx, this.heightAt(wx, wz), wz);
+      if (v.y < 0.5) { this.tmpP = this.tmpP || new THREE.Vector3(); this.tmpP.set(wx, 0.3, wz); if (this.pointHit(this.tmpP)) continue; }
+      q.setFromAxisAngle(Y, h * 20);
+      const sc = 0.7 + hash(gj + 11, gi) * 0.8;
+      s.set(sc, sc * (0.8 + h * 0.6), sc);
+      m4.compose(v, q, s);
+      this.grass.setMatrixAt(n++, m4);
+    }
+    this.grass.count = n;
+    this.grass.instanceMatrix.needsUpdate = true;
+  }
+
   // следы войны: сгоревшие машины, воронки, блокпосты, мешки
   buildWarProps() {
     const m = this.mats;
@@ -872,6 +939,11 @@ export class World {
     const a = (Math.random() - 0.5) * 400;
     return Math.random() < 0.5 ? new THREE.Vector3(r, 0, a) : new THREE.Vector3(a, 0, r);
   }
+}
+
+function hash(a, b) {
+  const s = Math.sin(a * 127.1 + b * 311.7) * 43758.5453;
+  return s - Math.floor(s);
 }
 
 function segBox(ax, ay, az, dx, dy, dz, b) {

@@ -7,6 +7,7 @@ precision highp float;
 uniform sampler2D tDiffuse;
 uniform vec2 res;
 uniform float time, signal, distort, analog, flash, hurt, exposure;
+uniform vec3 sunPos;
 varying vec2 vUv;
 float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233))) * 43758.5453); }
 vec3 aces(vec3 c){
@@ -40,6 +41,17 @@ void main(){
   col.g = samp(uvd).g;
   col.b = samp(uvd - d * ca * 2.0).b;
   col = aces(col);
+  // лёгкая цветокоррекция: контраст, насыщенность, тёплые света
+  float lm = dot(col, vec3(0.299, 0.587, 0.114));
+  col = mix(vec3(lm), col, 1.06);
+  col = clamp((col - 0.5) * 1.07 + 0.5, 0.0, 1.0);
+  col *= vec3(1.03, 1.0, 0.96);
+  // солнечный блик
+  vec2 sd = (uvd - sunPos.xy) * vec2(res.x / res.y, 1.0);
+  float sl = length(sd);
+  col += vec3(1.0, 0.85, 0.6) * (pow(max(0.0, 1.0 - sl * 1.4), 5.0) * 0.45 + pow(max(0.0, 1.0 - abs(sd.y) * 40.0), 2.0) * max(0.0, 1.0 - sl) * 0.12) * sunPos.z;
+  vec2 gh = (vec2(0.5) - sunPos.xy) * 0.7 + 0.5;
+  col += vec3(0.5, 0.7, 1.0) * pow(max(0.0, 1.0 - length((uvd - gh) * vec2(res.x / res.y, 1.0)) * 9.0), 2.0) * 0.12 * sunPos.z;
   // аналог: шум, строки, обесцвечивание
   float n = h(uv * res + fract(time) * 100.0);
   float lum = dot(col, vec3(0.299, 0.587, 0.114));
@@ -74,7 +86,7 @@ export class Post {
       vertexShader: VS, fragmentShader: FS,
       uniforms: {
         tDiffuse: { value: this.rt.texture }, res: { value: new THREE.Vector2(4, 4) }, time: { value: 0 },
-        signal: { value: 1 }, distort: { value: 0.22 }, analog: { value: 1 }, flash: { value: 0 }, hurt: { value: 0 }, exposure: { value: 1 },
+        signal: { value: 1 }, distort: { value: 0.22 }, analog: { value: 1 }, flash: { value: 0 }, hurt: { value: 0 }, exposure: { value: 1 }, sunPos: { value: new THREE.Vector3(0, 0, 0) },
       },
       depthTest: false, depthWrite: false,
     });

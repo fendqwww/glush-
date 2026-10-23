@@ -257,7 +257,7 @@ export class Vehicles {
         let d = want - ud.turret.rotation.y;
         while (d > Math.PI) d -= Math.PI * 2; while (d < -Math.PI) d += Math.PI * 2;
         const dd = drone.pos.distanceTo(g.position);
-        if (dd < 260) ud.turret.rotation.y += Math.max(-1, Math.min(1, d)) * dt * (v.type === 'aa' ? 2.5 : 0.6);
+        if (dd < 260) ud.turret.rotation.y += Math.max(-1, Math.min(1, d)) * dt * (v.type === 'aa' ? 1.4 : 0.5);
         if (ud.gun) {
           const el = Math.atan2(tmp.y - tp.y, Math.hypot(tmp.x - tp.x, tmp.z - tp.z));
           ud.gun.rotation.x += (Math.max(-0.1, Math.min(v.type === 'aa' ? 1.4 : 0.35, el)) - ud.gun.rotation.x) * dt * 2;
@@ -280,7 +280,7 @@ export class Vehicles {
       if (drone && drone.alive) {
         // проверка отрезка за кадр на близость к дрону
         const d2 = distSegPoint(t.p, t.v, dt, drone.pos);
-        if (d2 < (drone.p.radius + 0.35) ** 2) {
+        if (d2 < (drone.p.radius + 0.12) ** 2) {
           t.life = 0; t.m.visible = false;
           if (signalCb) signalCb('hit');
         }
@@ -292,19 +292,40 @@ export class Vehicles {
     const g = v.mesh;
     v.fireT -= dt;
     const d = drone.pos.distanceTo(g.position);
-    if (d > 230 || drone.pos.y < 1.5) return;
-    if (v.fireT > 0) return;
+    // маленький дрон низко над землёй заметить трудно
+    const agl = drone.pos.y;
+    const range = agl < 8 ? 70 : agl < 20 ? 120 : 170;
     const muzzle = this.tmp2.set(g.position.x, 3.2, g.position.z);
-    if (!this.world.lineClear(muzzle, drone.pos)) { v.fireT = 0.3; return; }
-    if (v.burst <= 0) { v.burst = 6 + Math.floor(Math.random() * 6); }
+    v.losT = (v.losT || 0) - dt;
+    if (v.losT <= 0) { v.losT = 0.25; v.los = d < range && agl > 1.5 && this.world.lineClear(muzzle, drone.pos); }
+    // время на обнаружение и захват цели
+    if (v.los) v.track = Math.min(4, (v.track || 0) + dt);
+    else v.track = Math.max(0, (v.track || 0) - dt * 2);
+    // наводчик видит дрон с запаздыванием
+    if (!v.est) { v.est = drone.pos.clone(); v.estV = new THREE.Vector3(); }
+    const k = Math.min(1, dt * 1.6);
+    v.est.lerp(drone.pos, k);
+    v.estV.lerp(drone.vel, k * 0.6);
+    if (!v.los || v.track < 2.2 || v.fireT > 0) return;
+    // ствол должен смотреть на цель
+    const ud = g.userData;
+    if (ud.turret) {
+      const lp = this.tmp.copy(drone.pos); g.worldToLocal(lp);
+      const want = Math.atan2(-(lp.x - ud.turret.position.x), -(lp.z - ud.turret.position.z));
+      let dd = want - ud.turret.rotation.y;
+      while (dd > Math.PI) dd -= Math.PI * 2; while (dd < -Math.PI) dd += Math.PI * 2;
+      if (Math.abs(dd) > 0.3) return;
+    }
+    if (v.burst <= 0) v.burst = 4 + Math.floor(Math.random() * 4);
     v.burst--;
-    v.fireT = v.burst > 0 ? 0.09 : 1.4 + Math.random() * 1.2;
+    v.fireT = v.burst > 0 ? 0.12 : 2.2 + Math.random() * 2;
     const t = this.tracers[this.trHead]; this.trHead = (this.trHead + 1) % this.tracers.length;
-    const sp = 320;
+    const sp = 300;
     const time = d / sp;
-    const aim = this.tmp.copy(drone.pos).addScaledVector(drone.vel, time * 0.8);
+    const aim = this.tmp.copy(v.est).addScaledVector(v.estV, time * 0.5);
     aim.y += 9.8 * 0.5 * time * time * 0.5;
-    const spread = 1.2 + d * 0.015;
+    const spd = drone.vel.length();
+    const spread = 2 + d * 0.035 + spd * 0.2;
     aim.x += (Math.random() - 0.5) * spread; aim.y += (Math.random() - 0.5) * spread; aim.z += (Math.random() - 0.5) * spread;
     t.p.copy(muzzle);
     t.v.copy(aim).sub(muzzle).normalize().multiplyScalar(sp);

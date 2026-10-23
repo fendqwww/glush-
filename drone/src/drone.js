@@ -4,22 +4,22 @@ import * as THREE from 'three';
 export const TYPES = {
   kamikaze: {
     name: 'КАМИКАДЗЕ 7"', desc: 'кумулятивная БЧ, подрыв при ударе', mass: 1.4, twr: 5.2, drag: 0.016, lin: 0.05,
-    radius: 0.24, tilt: 28, rates: 1.0, superRate: 0.68, expo: 0.3, crash: 3.5, warhead: 1, drops: 0, battery: 240, color: 0x2a2d2f,
+    radius: 0.24, tilt: 28, rates: 0.75, superRate: 0.55, expo: 0.5, crash: 3.5, warhead: 1, drops: 0, battery: 240, color: 0x2a2d2f,
     blast: 9, dmg: 120, signal: 1,
   },
   bomber: {
     name: 'БОМБЕР', desc: '4 сброса ВОГ, медленный и устойчивый', mass: 2.6, twr: 3.0, drag: 0.03, lin: 0.12,
-    radius: 0.38, tilt: 10, rates: 0.7, superRate: 0.5, expo: 0.35, crash: 7, warhead: 0, drops: 4, battery: 420, color: 0x3b3f2c,
+    radius: 0.38, tilt: 10, rates: 0.55, superRate: 0.4, expo: 0.5, crash: 7, warhead: 0, drops: 4, battery: 420, color: 0x3b3f2c,
     blast: 5, dmg: 60, signal: 1,
   },
   fiber: {
     name: 'ОПТОВОЛОКНО', desc: 'не боится РЭБ, кабель 3 км', mass: 1.7, twr: 4.4, drag: 0.018, lin: 0.06,
-    radius: 0.26, tilt: 24, rates: 0.95, superRate: 0.65, expo: 0.3, crash: 3.5, warhead: 1, drops: 0, battery: 300, color: 0x1f2a36,
+    radius: 0.26, tilt: 24, rates: 0.72, superRate: 0.55, expo: 0.5, crash: 3.5, warhead: 1, drops: 0, battery: 300, color: 0x1f2a36,
     blast: 9, dmg: 120, signal: 0, cable: 3000,
   },
   racer: {
     name: 'ГОНОЧНЫЙ 5"', desc: 'без БЧ, бешеная тяга, для гонок', mass: 0.65, twr: 9, drag: 0.012, lin: 0.03,
-    radius: 0.17, tilt: 32, rates: 1.1, superRate: 0.72, expo: 0.25, crash: 14, warhead: 0, drops: 0, battery: 200, color: 0x7a1c1c,
+    radius: 0.17, tilt: 32, rates: 0.9, superRate: 0.62, expo: 0.4, crash: 14, warhead: 0, drops: 0, battery: 200, color: 0x7a1c1c,
     blast: 0, dmg: 0, signal: 1,
   },
 };
@@ -68,6 +68,7 @@ export class Drone {
     this.voltage = 16.8;
     this.dropsLeft = this.p.drops;
     this.altHold = pos.y;
+    this.sm = null;
     this.thrOut = 0;
     this.flightTime = 0;
     this.maxG = 0;
@@ -90,20 +91,29 @@ export class Drone {
       return v * Math.PI / 180;
     };
 
+    // сглаживание стиков и экспо: без резких рывков
+    if (!this.sm) this.sm = { thr: inp.thr, yaw: 0, pitch: 0, roll: 0 };
+    const sm = this.sm, ks = 1 - Math.exp(-dt / 0.09), kt = 1 - Math.exp(-dt / 0.12);
+    sm.yaw += (inp.yaw - sm.yaw) * ks; sm.pitch += (inp.pitch - sm.pitch) * ks; sm.roll += (inp.roll - sm.roll) * ks;
+    sm.thr += (inp.thr - sm.thr) * kt;
+    const ex = x => x * (0.35 + 0.65 * x * x);
+    inp = { thr: sm.thr, yaw: ex(sm.yaw), pitch: ex(sm.pitch), roll: ex(sm.roll) };
     let thr = inp.thr;
     const want = tmpV;
     if (this.mode === 'ACRO') {
       want.set(rc(-inp.pitch, P.rates, P.superRate, P.expo), rc(-inp.yaw, P.rates * 0.8, P.superRate * 0.8, P.expo), rc(-inp.roll, P.rates, P.superRate, P.expo));
     } else {
       // стабилизация: стики задают углы, газ около центра держит высоту
-      const maxTilt = 1.0;
-      this.heading -= inp.yaw * 2.6 * dt;
+      const maxTilt = 0.75;
+      this.heading -= inp.yaw * 1.5 * dt;
       tmpE.set(-inp.pitch * maxTilt, this.heading, -inp.roll * maxTilt, 'YXZ');
       tmpQ.setFromEuler(tmpE);
       // ошибка ориентации в осях тела
       tmpQ2.copy(this.quat).invert().multiply(tmpQ);
       if (tmpQ2.w < 0) { tmpQ2.x *= -1; tmpQ2.y *= -1; tmpQ2.z *= -1; tmpQ2.w *= -1; }
-      want.set(tmpQ2.x, tmpQ2.y, tmpQ2.z).multiplyScalar(2 * 9);
+      want.set(tmpQ2.x, tmpQ2.y, tmpQ2.z).multiplyScalar(2 * 5);
+      // ограничение угловой скорости в стабилизации
+      const wl = want.length(); if (wl > 4) want.multiplyScalar(4 / wl);
       // газ: центр стика = висение с удержанием высоты
       const t = inp.thr - 0.5;
       const dz = Math.abs(t) < 0.06 ? 0 : t - Math.sign(t) * 0.06;
@@ -123,7 +133,7 @@ export class Drone {
       want.x += (Math.random() - 0.5) * j; want.z += (Math.random() - 0.5) * j;
     }
     // отклик моторов
-    const k = 1 - Math.exp(-dt / 0.035);
+    const k = 1 - Math.exp(-dt / 0.07);
     this.rate.x += (want.x - this.rate.x) * k;
     this.rate.y += (want.y - this.rate.y) * k;
     this.rate.z += (want.z - this.rate.z) * k;
@@ -145,7 +155,7 @@ export class Drone {
     }
 
     // тяга
-    this.thrOut += (thr - this.thrOut) * (1 - Math.exp(-dt / 0.05));
+    this.thrOut += (thr - this.thrOut) * (1 - Math.exp(-dt / 0.09));
     const sag = 0.82 + 0.18 * this.battery - this.thrOut * 0.06;
     const ground = world.heightAt(this.pos.x, this.pos.z);
     const hAgl = this.pos.y - ground;

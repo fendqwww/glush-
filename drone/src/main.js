@@ -93,10 +93,10 @@ class Game {
     const g = new THREE.SphereGeometry(1200, 32, 16);
     const m = new THREE.ShaderMaterial({
       side: THREE.BackSide, depthWrite: false, fog: false,
-      uniforms: { sun: { value: sun } },
+      uniforms: { sun: { value: sun }, time: { value: 0 } },
       vertexShader: 'varying vec3 vD; void main(){ vD = normalize(position); vec4 p = modelViewMatrix * vec4(position,1.0); gl_Position = projectionMatrix * p; gl_Position.z = gl_Position.w * 0.9999; }',
       fragmentShader: `
-        uniform vec3 sun; varying vec3 vD;
+        uniform vec3 sun; uniform float time; varying vec3 vD;
         void main(){
           vec3 d = normalize(vD);
           float h = max(d.y, 0.0);
@@ -108,7 +108,7 @@ class Game {
           c += vec3(1.0, 0.9, 0.7) * pow(s, 900.0) * 30.0;
           c += vec3(1.0, 0.7, 0.4) * pow(1.0 - h, 6.0) * pow(s, 2.0) * 0.4;
           // облака
-          vec2 uv = d.xz / max(0.08, d.y) * 0.6;
+          vec2 uv = d.xz / max(0.08, d.y) * 0.6 + vec2(time * 0.006, time * 0.002);
           float n = sin(uv.x * 1.3 + sin(uv.y * 0.7)) * sin(uv.y * 1.1 + sin(uv.x * 0.9)) + 0.5 * sin(uv.x * 3.1 - uv.y * 2.3);
           float cl = smoothstep(0.35, 1.0, n) * smoothstep(0.0, 0.25, d.y) * 0.65;
           c = mix(c, vec3(0.95, 0.93, 0.9) + vec3(0.2, 0.12, 0.0) * pow(s, 4.0), cl);
@@ -453,6 +453,15 @@ class Game {
     this.sunLight.target.position.set(tx, 0, tz);
     this.sunLight.position.set(tx + this.sunDir.x * 200, this.sunDir.y * 200, tz + this.sunDir.z * 200);
     this.sky.position.copy(this.camera.position);
+    this.sky.material.uniforms.time.value = now;
+    this.world.updateGrass(this.camera.position);
+    // блик солнца в объективе
+    const sp = this.tmp.copy(this.sunDir).multiplyScalar(500).add(this.camera.position);
+    const sv = sp.clone().project(this.camera);
+    this.sunT = (this.sunT || 0) - dt;
+    if (this.sunT <= 0) { this.sunT = 0.2; this.sunOcc = this.world.lineClear(this.camera.position, this.tmp2.copy(this.sunDir).multiplyScalar(120).add(this.camera.position)) ? 1 : 0; }
+    const vis = sv.z < 1 && Math.abs(sv.x) < 1.3 && Math.abs(sv.y) < 1.3 ? this.sunOcc : 0;
+    this.post.mat.uniforms.sunPos.value.set(sv.x * 0.5 + 0.5, sv.y * 0.5 + 0.5, (this.post.mat.uniforms.sunPos.value.z || 0) + (vis - (this.post.mat.uniforms.sunPos.value.z || 0)) * Math.min(1, dt * 6));
     const u = this.post.mat.uniforms;
     u.time.value = now;
     u.flash.value *= Math.exp(-dt * 6);
@@ -484,7 +493,7 @@ class Game {
     this.fx.setScale(bh / (2 * Math.tan(this.camera.fov * Math.PI / 360)));
     this.ui.hc.width = w; this.ui.hc.height = h;
     $('rotate').style.display = isTouch && h > w ? 'flex' : 'none';
-    this.input.R = Math.max(45, Math.min(75, h * 0.14));
+    this.input.R = Math.max(60, Math.min(95, h * 0.2));
   }
 
   menuUpdate(dt, now) {
@@ -574,8 +583,8 @@ class Game {
 
     this.vehicles.update(dt, d, e => {
       if (e === 'hit' && d.alive) {
-        this.hp -= 0.35; this.hurt = 1; this.shake(0.6); this.audio.thud(30);
-        d.rate.x += (Math.random() - 0.5) * 10; d.rate.z += (Math.random() - 0.5) * 10;
+        this.hp -= 0.26; this.hurt = 1; this.shake(0.5); this.audio.thud(30);
+        d.rate.x += (Math.random() - 0.5) * 5; d.rate.z += (Math.random() - 0.5) * 5;
         if (this.hp <= 0) { if (d.p.warhead && d.armed) this.detonate(null); else this.loseDrone('СБИТ ЗСУ', false); }
         else this.toast('ПОПАДАНИЕ! ДРОН ПОВРЕЖДЁН', 'bad');
       }
