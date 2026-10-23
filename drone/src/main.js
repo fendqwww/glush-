@@ -23,7 +23,9 @@ class Game {
     this.canvas = $('c');
     let renderer;
     try {
-      renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: false, powerPreference: 'high-performance', stencil: false });
+      const opts = { canvas: this.canvas, antialias: false, powerPreference: 'high-performance', stencil: false };
+      if (/gl1/.test(location.search)) opts.context = this.canvas.getContext('webgl', { antialias: false, stencil: false });
+      renderer = new THREE.WebGLRenderer(opts);
     } catch (e) {
       $('loading').innerHTML = 'WebGL недоступен в этом браузере :(';
       throw e;
