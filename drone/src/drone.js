@@ -77,7 +77,19 @@ export class Drone {
   }
 
   // вход: thr 0..1, yaw/pitch/roll -1..1; signal 0..1 (задержки и шум снаружи)
+  // физика с подшагами: стабильно при любом FPS
   update(dt, inp, world, signal) {
+    const n = Math.min(8, Math.ceil(dt / (1 / 120)));
+    let last = null;
+    for (let i = 0; i < n; i++) {
+      const ev = this.step(dt / n, inp, world, signal);
+      if (ev) { if (ev.type !== 'bump') return ev; last = ev; }
+      if (!this.alive) break;
+    }
+    return last;
+  }
+
+  step(dt, inp, world, signal) {
     if (!this.alive) return null;
     const P = this.p;
     let event = null;

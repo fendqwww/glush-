@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { ROADS } from './world.js';
 
 export const MODES = {
-  strike: { name: 'УДАР', desc: 'Найди и уничтожь всю технику в посёлке. Прикрытие: ЗСУ и РЭБ.', drone: 'kamikaze' },
+  strike: { name: 'УДАР', desc: 'Найди и уничтожь всю технику в посёлке. Танки, БМП, БТР и РЭБ.', drone: 'kamikaze' },
   convoy: { name: 'КОНВОЙ', desc: 'Колонна идёт через посёлок. Не дай ей уйти: пропустишь 3 машины — провал.', drone: 'kamikaze' },
   race: { name: 'ГОНКА', desc: 'Трасса через цех, окна и двери домов. Пролетай ворота по порядку на время.', drone: 'racer' },
   defense: { name: 'ОБОРОНА', desc: 'Волны техники идут на твой блиндаж. За каждую волну — новые дроны.', drone: 'kamikaze' },
@@ -39,7 +39,7 @@ export function setupMode(G, id) {
   if (id === 'strike') {
     M.base = V3(-120, 0, -180); M.heading = Math.PI;
     M.drones = 5;
-    const kinds = ['tank', 'tank', 'apc', 'truck', 'truck', 'aa', 'ew', 'car'];
+    const kinds = ['tank', 'tank', 'apc', 'truck', 'truck', 'ifv', 'ew', 'car'];
     for (const k of kinds) {
       const s = roadSpot(M.base, 140);
       if (k === 'tank' || k === 'apc' || k === 'car') {
@@ -60,7 +60,7 @@ export function setupMode(G, id) {
     M.base = V3(-60, 0, -200); M.heading = Math.PI;
     M.drones = 7; M.escaped = 0; M.maxEsc = 3;
     const route = [V3(-420, 0, 60), V3(-60, 0, 60), V3(-60, 0, 180), V3(180, 0, 180), V3(180, 0, -60), V3(420, 0, -60)];
-    const kinds = ['car', 'truck', 'apc', 'tank', 'truck', 'aa', 'ew', 'tank', 'truck'];
+    const kinds = ['car', 'truck', 'apc', 'tank', 'truck', 'ifv', 'ew', 'tank', 'truck'];
     kinds.forEach((k, i) => {
       const r = route.map(p => p.clone());
       r[0] = V3(-420 - i * 16, 0, 60);
@@ -112,7 +112,7 @@ export function setupMode(G, id) {
     M.drones = 4;
     // стоянка техники и окопы
     const spots = [[25, 0, -150], [20, 0, -138], [32, 0, -140], [90, 0, -110], [100, 0, -118], [-20, 0, 120], [0, 0, 128], [120, 0, 100]];
-    const kinds = ['truck', 'truck', 'car', 'apc', 'tank', 'truck', 'ew', 'aa'];
+    const kinds = ['truck', 'truck', 'car', 'apc', 'tank', 'truck', 'ew', 'ifv'];
     // на дорогах рядом с этими местами
     kinds.forEach((k, i) => {
       const s = roadSpot(M.base, 90);
@@ -163,7 +163,7 @@ export function setupMode(G, id) {
 
 function spawnWave(G, n) {
   const V = G.vehicles;
-  const pool = ['car', 'truck', 'apc', 'tank', 'aa', 'ew'];
+  const pool = ['car', 'truck', 'apc', 'tank', 'ifv', 'ew'];
   const count = Math.min(9, 1 + n);
   for (let i = 0; i < count; i++) {
     const k = pool[Math.min(pool.length - 1, Math.floor(Math.random() * Math.min(pool.length, 2 + n)))];

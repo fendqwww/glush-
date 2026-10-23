@@ -203,7 +203,7 @@ export class World {
     const g = new THREE.BoxGeometry(sx, sy, sz);
     g.translate(cx, cy, cz);
     worldUV(g, mat.uvs || 2);
-    const chunk = Math.floor((cx + 1000) / 120) * 100 + Math.floor((cz + 1000) / 120);
+    const chunk = Math.floor((cx + 1000) / 200) * 100 + Math.floor((cz + 1000) / 200);
     const key = mat.uuid + '|' + chunk;
     let e = this.geos.get(key);
     if (!e) { e = { mat, list: [] }; this.geos.set(key, e); }
@@ -764,21 +764,30 @@ export class World {
     const crownM = new THREE.MeshStandardMaterial({ map: leaves, color: 0xffffff, roughness: 1, flatShading: true });
     const pineM = new THREE.MeshStandardMaterial({ map: leaves, color: 0xa8c0a0, roughness: 1, flatShading: true });
     const dec = list.filter(t => t[3] === 0), con = list.filter(t => t[3] === 1);
-    const mk = (geo, mat, arr, yOff) => {
-      const im = new THREE.InstancedMesh(geo, mat, arr.length);
+    const mk = (geo, mat, all, yOff) => {
+      // разбиваем по секторам, чтобы работало отсечение по камере и тени
+      const groups = new Map();
+      for (const t of all) {
+        const k = Math.floor((t[0] + 600) / 300) * 100 + Math.floor((t[1] + 600) / 300);
+        let a = groups.get(k); if (!a) { a = []; groups.set(k, a); } a.push(t);
+      }
       const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
-      const col = new THREE.Color();
-      arr.forEach((t, i) => {
-        q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), t[4]);
-        s.set(t[2], t[2], t[2]);
-        p.set(t[0], this.heightAt(t[0], t[1]) + yOff, t[1]);
-        m4.compose(p, q, s);
-        im.setMatrixAt(i, m4);
-        col.setHSL(0.2 + (t[4] % 1) * 0.08, 0.35, 0.62 + (t[4] % 0.5) * 0.3);
-        im.setColorAt(i, col);
-      });
-      im.castShadow = true; im.receiveShadow = true;
-      this.scene.add(im);
+      const col = new THREE.Color(), Y = new THREE.Vector3(0, 1, 0);
+      for (const [, arr] of groups) {
+        const im = new THREE.InstancedMesh(geo, mat, arr.length);
+        arr.forEach((t, i) => {
+          q.setFromAxisAngle(Y, t[4]);
+          s.set(t[2], t[2], t[2]);
+          p.set(t[0], this.heightAt(t[0], t[1]) + yOff, t[1]);
+          m4.compose(p, q, s);
+          im.setMatrixAt(i, m4);
+          col.setHSL(0.2 + (t[4] % 1) * 0.08, 0.35, 0.62 + (t[4] % 0.5) * 0.3);
+          im.setColorAt(i, col);
+        });
+        im.computeBoundingSphere();
+        im.castShadow = true; im.receiveShadow = true;
+        this.scene.add(im);
+      }
     };
     mk(trunkG, trunkM, list, 0);
     mk(crownG, crownM, dec, 0);
@@ -834,7 +843,7 @@ export class World {
     const x = c.getContext('2d');
     for (let i = 0; i < 26; i++) {
       const bx = 4 + Math.random() * (S - 8), h = S * (0.45 + Math.random() * 0.55);
-      x.strokeStyle = `hsl(${62 + Math.random() * 22},${28 + Math.random() * 16}%,${18 + Math.random() * 14}%)`;
+      x.strokeStyle = `hsl(${62 + Math.random() * 22},${30 + Math.random() * 16}%,${24 + Math.random() * 16}%)`;
       x.lineWidth = 1.5 + Math.random() * 1.5;
       x.beginPath(); x.moveTo(bx, S); x.quadraticCurveTo(bx + (Math.random() - 0.5) * 8, S - h * 0.6, bx + (Math.random() - 0.5) * 16, S - h); x.stroke();
     }

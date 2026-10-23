@@ -35,7 +35,7 @@ class Game {
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = settings.quality > 0 ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
     this.maxPR = Math.min(window.devicePixelRatio || 1, settings.quality > 0 ? 2 : 1.5);
-    this.pr = Math.min(this.maxPR, isTouch ? 1.25 : 1.5);
+    this.pr = Math.min(this.maxPR, isTouch ? 1.1 : 1.5);
 
     const scene = this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(72, 1, 0.05, 1400);
@@ -89,7 +89,7 @@ class Game {
   }
 
   buildSky() {
-    const sun = this.sunDir = new THREE.Vector3(-0.55, 0.42, -0.72).normalize();
+    const sun = this.sunDir = new THREE.Vector3(-0.5, 0.68, -0.6).normalize();
     const g = new THREE.SphereGeometry(1200, 32, 16);
     const m = new THREE.ShaderMaterial({
       side: THREE.BackSide, depthWrite: false, fog: false,
@@ -121,9 +121,9 @@ class Game {
     this.sky = sky;
     this.scene.add(sky);
     this.scene.fog = new THREE.Fog(0xb4b2ad, 60, 900);
-    const hemi = new THREE.HemisphereLight(0xc4d4f0, 0x5a5040, 1.15);
+    const hemi = new THREE.HemisphereLight(0xc8d6f0, 0x6a5e48, 1.7);
     this.scene.add(hemi);
-    const dl = this.sunLight = new THREE.DirectionalLight(0xfff0dc, 3.2);
+    const dl = this.sunLight = new THREE.DirectionalLight(0xfff0dc, 3.0);
     dl.castShadow = true;
     const S = settings.quality > 0 ? 2048 : 1024;
     dl.shadow.mapSize.set(S, S);
@@ -436,6 +436,10 @@ class Game {
   }
 
   loop() {
+    // не больше 60 кадров (на 120 Гц экранах экономим батарею)
+    const tnow = performance.now();
+    if (this.lastT && tnow - this.lastT < 14.5) return;
+    this.lastT = tnow;
     let dt = this.clock.getDelta();
     if (dt > 0.1) dt = 0.1;
     this.perf(dt);
@@ -474,8 +478,12 @@ class Game {
       const avg = this.frameAcc / this.frameN;
       this.frameAcc = 0; this.frameN = 0;
       let pr = this.pr;
-      if (avg > 0.024 && pr > 0.55) pr = Math.max(0.55, pr - 0.15);
-      else if (avg < 0.0175 && pr < this.maxPR) pr = Math.min(this.maxPR, pr + 0.1);
+      if (this.capPR == null) this.capPR = this.maxPR;
+      // если прошлое повышение уронило fps, ниже этого уровня и держимся
+      if (avg > 0.0195 && this.lastRaise) this.capPR = Math.max(0.6, this.pr - 0.05);
+      if (avg > 0.0195 && pr > 0.6) pr = Math.max(0.6, pr - (avg > 0.028 ? 0.2 : 0.1));
+      else if (avg < 0.0172 && pr + 0.05 <= this.capPR) pr = pr + 0.05;
+      this.lastRaise = pr > this.pr;
       if (pr !== this.pr) { this.pr = pr; this.resize(); }
       this.fps = Math.round(1 / avg);
     }
@@ -766,7 +774,7 @@ class Game {
       if (v3.z > 1 || Math.abs(v3.x) > 1.1 || Math.abs(v3.y) > 1.1) continue;
       const x = (v3.x * 0.5 + 0.5) * W, y = (-v3.y * 0.5 + 0.5) * H;
       const s = Math.max(10, Math.min(60, 900 / dist));
-      const col = v.type === 'aa' ? '#ffd23a' : v.type === 'ew' ? '#c07bff' : v.target ? '#ff4436' : '#aaa';
+      const col = v.type === 'ew' ? '#c07bff' : v.target ? '#ff4436' : '#aaa';
       c.strokeStyle = col; c.lineWidth = 2;
       const k = s * 0.35;
       c.beginPath();
@@ -848,7 +856,7 @@ class Game {
     c.stroke();
     for (const v of this.vehicles.list) {
       if (!v.alive) continue;
-      c.fillStyle = v.type === 'aa' ? '#ffd23a' : v.type === 'ew' ? '#c07bff' : '#ff4436';
+      c.fillStyle = v.type === 'ew' ? '#c07bff' : '#ff4436';
       c.fillRect(mx(v.mesh.position.x) - 2, my(v.mesh.position.z) - 2, 4, 4);
       if (v.jam) { c.strokeStyle = 'rgba(192,123,255,0.4)'; c.beginPath(); c.arc(mx(v.mesh.position.x), my(v.mesh.position.z), v.jam * sc, 0, 7); c.stroke(); }
     }
