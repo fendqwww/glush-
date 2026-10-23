@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+</head>
+<body>
+<title>Глухово</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,700;1,500&family=Caveat:wght@500;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* слой поверх 3d-сцены: тусклая бумага, чернила, ржавая кровь */
+:root {
+  --ink: #0b0d12;
+  --night: #121620;
+  --bone: #e7e1d3;
+  --ash: #8b8f9a;
+  --rust: #b3392b;
+  --moss: #9fc7a0;
+  --paper: #e9dfc6;
+  --paper-ink: #2a2118;
+  --f-display: 'Cormorant Garamond', 'Times New Roman', serif;
+  --f-hand: 'Caveat', 'Segoe Print', cursive;
+  --f-mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { background: var(--ink); color: var(--bone); overflow: hidden; font-family: var(--f-mono); font-size: 14px;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: none; }
+#app { position: fixed; inset: 0; }
+canvas#gl { display: block; width: 100%; height: 100%; }
+.layer { position: fixed; inset: 0; pointer-events: none; }
+#grain { opacity: .09; mix-blend-mode: overlay; background-size: 256px; animation: grain .5s steps(4) infinite; }
+@keyframes grain { 0% { background-position: 0 0 } 25% { background-position: -60px 40px } 50% { background-position: 80px -30px } 75% { background-position: -20px -90px } }
+#vignette { background: radial-gradient(ellipse at center, transparent 45%, rgba(0,0,0,.75) 100%); }
+#hurt { background: radial-gradient(ellipse at center, transparent 30%, rgba(160,10,10,.65) 100%); opacity: 0; transition: opacity .25s; }
+#fade { background: #000; opacity: 0; transition: opacity .8s; }
+#fade.on { opacity: 1; }
+
+/* hud */
+#hud { position: fixed; inset: 0; pointer-events: none; padding: max(12px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(12px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+#objective { position: absolute; top: max(12px, env(safe-area-inset-top, 0px)); left: max(16px, env(safe-area-inset-left, 0px)); max-width: 46vw; }
+#objective small { display: block; font-size: 10px; letter-spacing: .18em; text-transform: uppercase; color: var(--ash); }
+#objective span { font-family: var(--f-display); font-size: 20px; font-style: italic; line-height: 1.15; text-shadow: 0 1px 6px #000; }
+#status { position: absolute; top: max(12px, env(safe-area-inset-top, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); text-align: right; display: grid; gap: 4px; justify-items: end; }
+#clock { font-size: 22px; font-variant-numeric: tabular-nums; letter-spacing: .05em; text-shadow: 0 0 10px rgba(179,57,43,.5); }
+#clock.late { color: var(--rust); animation: pulse 1s infinite; }
+@keyframes pulse { 50% { opacity: .5 } }
+#hp { display: flex; gap: 5px; }
+#hp i { width: 12px; height: 12px; transform: rotate(45deg); border: 1px solid var(--rust); background: var(--rust); }
+#hp i.off { background: transparent; opacity: .5; }
+#weapon { font-size: 12px; color: var(--ash); }
+#stam { width: 64px; height: 3px; background: rgba(231,225,211,.15); }
+#stam i { display: block; height: 100%; width: 100%; background: var(--moss); transition: width .1s; }
+#stam.tired i { background: var(--rust); }
+#inv { position: absolute; left: max(16px, env(safe-area-inset-left, 0px)); bottom: max(14px, env(safe-area-inset-bottom, 0px)); display: flex; gap: 6px; flex-wrap: wrap; max-width: 40vw; }
+#inv span { font-size: 11px; padding: 3px 7px; border: 1px solid rgba(231,225,211,.25); background: rgba(10,12,18,.6); }
+#prompt { position: absolute; left: 50%; top: 60%; transform: translateX(-50%); font-size: 14px; padding: 6px 12px; background: rgba(5,6,10,.7); border: 1px solid rgba(231,225,211,.3); white-space: nowrap; }
+#prompt kbd { font-family: var(--f-mono); border: 1px solid var(--bone); padding: 0 5px; margin-right: 6px; }
+#cross { position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px; border-radius: 50%; background: rgba(231,225,211,.7); }
+#sub { position: absolute; left: 50%; bottom: max(84px, calc(env(safe-area-inset-bottom, 0px) + 84px)); transform: translateX(-50%); width: min(720px, calc(100vw - 32px)); text-align: center; font-family: var(--f-display); font-size: 21px; line-height: 1.3; text-shadow: 0 2px 6px #000, 0 0 2px #000; text-wrap: balance; }
+#sub b { font-family: var(--f-mono); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; margin-right: 6px; }
+#toast { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); font-family: var(--f-display); font-size: 24px; font-style: italic; text-shadow: 0 2px 8px #000; transition: opacity .5s; text-align: center; }
+#topbtns { position: absolute; top: max(100px, calc(env(safe-area-inset-top, 0px) + 100px)); right: max(16px, env(safe-area-inset-right, 0px)); display: flex; gap: 6px; pointer-events: auto; }
+.hb { font-family: var(--f-mono); font-size: 11px; background: rgba(10,12,18,.65); color: var(--bone); border: 1px solid rgba(231,225,211,.3); padding: 6px 9px; cursor: pointer; }
+.hb:focus-visible, button:focus-visible { outline: 2px solid var(--moss); outline-offset: 2px; }
+
+/* сенсорное управление */
+#touch { position: fixed; inset: 0; pointer-events: none; }
+#touch .zone { position: absolute; top: 0; bottom: 0; pointer-events: auto; }
+#lzone { left: 0; width: 45%; }
+#rzone { right: 0; width: 55%; }
+#stick { position: absolute; width: 120px; height: 120px; margin: -60px; border-radius: 50%; border: 1px solid rgba(231,225,211,.35); background: rgba(10,12,18,.25); pointer-events: none; }
+#knob { position: absolute; left: 50%; top: 50%; width: 50px; height: 50px; margin: -25px; border-radius: 50%; background: rgba(231,225,211,.35); }
+#tbtns { position: absolute; right: max(14px, env(safe-area-inset-right, 0px)); bottom: max(18px, env(safe-area-inset-bottom, 0px)); width: 210px; height: 210px; pointer-events: none; }
+.tb { position: absolute; pointer-events: auto; border-radius: 50%; border: 1px solid rgba(231,225,211,.45); background: rgba(10,12,18,.5); color: var(--bone); font-family: var(--f-mono); font-size: 10px; letter-spacing: .05em; display: grid; place-items: center; touch-action: none; }
+.tb.on { background: rgba(231,225,211,.3); }
+.tb.hot { border-color: var(--moss); color: var(--moss); box-shadow: 0 0 12px rgba(159,199,160,.4); }
+#b-use { width: 84px; height: 84px; right: 0; bottom: 0; font-size: 11px; }
+#b-atk { width: 66px; height: 66px; right: 96px; bottom: 6px; }
+#b-jump { width: 66px; height: 66px; right: 10px; bottom: 96px; }
+#b-light { width: 52px; height: 52px; right: 90px; bottom: 90px; }
+#b-run { width: 52px; height: 52px; right: 150px; bottom: 80px; }
+
+/* экраны */
+.screen { position: fixed; inset: 0; display: grid; place-items: center; background: radial-gradient(ellipse at 50% 30%, rgba(30,36,52,.6), rgba(5,6,9,.96) 70%); padding-block: max(20px, env(safe-area-inset-top, 0px)) max(20px, env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); overflow-y: auto; }
+.panel { width: min(560px, 100%); display: grid; gap: 18px; }
+.eyebrow { font-size: 11px; letter-spacing: .3em; text-transform: uppercase; color: var(--ash); }
+h1 { font-family: var(--f-display); font-weight: 700; font-size: clamp(56px, 14vw, 120px); line-height: .85; margin: 0; letter-spacing: .02em; color: var(--bone); text-shadow: 0 0 40px rgba(179,57,43,.35); }
+h1 em { color: var(--rust); font-style: normal; }
+h2 { font-family: var(--f-display); font-size: 34px; margin: 0; text-wrap: balance; }
+.lead { font-family: var(--f-display); font-size: 20px; line-height: 1.4; color: #cfc9bb; margin: 0; max-width: 34em; }
+.btns { display: flex; flex-wrap: wrap; gap: 10px; }
+.btn { font-family: var(--f-mono); font-size: 14px; letter-spacing: .08em; text-transform: uppercase; padding: 13px 20px; border: 1px solid var(--bone); background: transparent; color: var(--bone); cursor: pointer; }
+.btn.main { background: var(--bone); color: var(--ink); }
+.btn:hover { background: var(--rust); border-color: var(--rust); color: var(--bone); }
+.btn[disabled] { opacity: .5; pointer-events: none; }
+.small { font-size: 11px; color: var(--ash); line-height: 1.6; }
+.ctrl { display: grid; grid-template-columns: auto 1fr; gap: 4px 14px; font-size: 12px; }
+.ctrl kbd { font-family: var(--f-mono); color: var(--moss); }
+#loadbar { height: 2px; background: rgba(231,225,211,.15); }
+#loadbar i { display: block; height: 100%; width: 0; background: var(--rust); transition: width .2s; }
+
+/* записка */
+#modal { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,.72); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 16px; pointer-events: auto; }
+.paper { width: min(520px, 100%); max-height: 82vh; overflow-y: auto; background: var(--paper); color: var(--paper-ink); padding: 26px 28px; box-shadow: 0 20px 60px rgba(0,0,0,.8); transform: rotate(-.6deg);
+  background-image: repeating-linear-gradient(transparent 0 31px, rgba(60,80,120,.18) 31px 32px); }
+.paper h3 { font-family: var(--f-display); font-size: 15px; letter-spacing: .12em; text-transform: uppercase; margin: 0 0 12px; color: #6b4b32; }
+.paper p { font-family: var(--f-hand); font-size: 24px; line-height: 32px; margin: 0; white-space: pre-wrap; }
+.paper .close { margin-top: 18px; font-family: var(--f-mono); font-size: 12px; background: var(--paper-ink); color: var(--paper); border: 0; padding: 10px 16px; cursor: pointer; }
+.lock { width: min(320px, 100%); background: linear-gradient(#2a2d33, #16181c); border: 1px solid #555; padding: 18px; display: grid; gap: 12px; box-shadow: 0 20px 60px #000; }
+.lock h3 { margin: 0; font-family: var(--f-display); font-size: 20px; }
+.lock .disp { font-size: 32px; text-align: center; letter-spacing: .4em; background: #0c1a10; color: #7dff9a; padding: 10px; font-variant-numeric: tabular-nums; text-shadow: 0 0 8px #3f8; min-height: 1.4em; }
+.lock .disp.err { color: #ff6b5a; background: #1f0c0c; text-shadow: 0 0 8px #f43; }
+.keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.keys button { font-family: var(--f-mono); font-size: 22px; padding: 12px 0; background: #3a3e46; color: var(--bone); border: 1px solid #626772; border-bottom-width: 3px; cursor: pointer; }
+.keys button:active { transform: translateY(2px); border-bottom-width: 1px; }
+.wheels { display: flex; justify-content: center; gap: 8px; }
+.wheel { display: grid; gap: 4px; justify-items: center; }
+.wheel button { width: 54px; font-size: 18px; padding: 6px 0; background: #3a3e46; color: var(--bone); border: 1px solid #626772; cursor: pointer; }
+.wheel .l { width: 54px; height: 60px; display: grid; place-items: center; font-family: var(--f-display); font-weight: 700; font-size: 38px; background: linear-gradient(#8a6a3a, #c9a35f 45%, #8a6a3a); color: #2a1b0a; }
+#journal ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+#journal li button { width: 100%; text-align: left; }
+body.touch #sub { bottom: auto; top: max(150px, calc(env(safe-area-inset-top, 0px) + 150px)); font-size: 18px; }
+@media (prefers-reduced-motion: reduce) { #grain { animation: none; } }
+@media (max-width: 600px) { #objective span { font-size: 16px; } #sub { font-size: 18px; bottom: max(240px, calc(env(safe-area-inset-bottom, 0px) + 240px)); } #clock { font-size: 18px; } }
+</style>
+
+<div id="app"><canvas id="gl"></canvas></div>
+<div class="layer" id="vignette"></div>
+<div class="layer" id="hurt"></div>
+<div class="layer" id="grain"></div>
+
+<div id="hud" hidden>
+  <div id="objective"><small>Цель</small><span id="obj"></span></div>
+  <div id="status"><div id="clock">23:15</div><div id="hp"></div><div id="stam"><i></i></div><div id="weapon"></div></div>
+  <div id="topbtns"><button class="hb" id="b-hint" type="button">Подсказка</button><button class="hb" id="b-journal" type="button">Записки</button><button class="hb" id="b-pause" type="button">Пауза</button></div>
+  <div id="cross"></div>
+  <div id="prompt" hidden></div>
+  <div id="toast"></div>
+  <div id="inv"></div>
+</div>
+<div id="sub" hidden></div>
+
+<div id="touch" hidden>
+  <div class="zone" id="lzone"></div>
+  <div class="zone" id="rzone"></div>
+  <div id="stick" hidden><div id="knob"></div></div>
+  <div id="tbtns">
+    <div class="tb" id="b-use">ДЕЙСТВИЕ</div>
+    <div class="tb" id="b-atk">УДАР</div>
+    <div class="tb" id="b-jump">ПРЫЖОК</div>
+    <div class="tb" id="b-light">СВЕТ</div>
+    <div class="tb" id="b-run">БЕГ</div>
+  </div>
+</div>
+
+<div class="layer" id="fade"></div>
+
+<div class="screen" id="menu">
+  <div class="panel">
+    <div class="eyebrow">Деревня Глухово · 23 октября · 23:15</div>
+    <h1>Глухо<em>во</em></h1>
+    <p class="lead">Сестра пропала в доме покойного деда. До полуночи сорок пять минут. Найди её раньше, чем проснётся то, что дед держал в подвале.</p>
+    <div id="loadbar"><i></i></div>
+    <div class="btns">
+      <button class="btn main" id="b-start" type="button" disabled>Загрузка…</button>
+      <button class="btn" id="b-cont" type="button" hidden>Продолжить</button>
+      <button class="btn" id="b-q" type="button">Графика: высокая</button>
+    </div>
+    <div class="ctrl" id="ctrl-pc">
+      <kbd>WASD</kbd><span>ходьба, Shift — бег, Пробел — прыжок</span>
+      <kbd>Мышь</kbd><span>обзор, ЛКМ — удар или выстрел</span>
+      <kbd>E</kbd><span>осмотреть, взять, открыть</span>
+      <kbd>F</kbd><span>фонарик · V — вид от первого лица</span>
+      <kbd>H / J</kbd><span>подсказка / записки · Esc — пауза</span>
+    </div>
+    <p class="small" id="ctrl-touch" hidden>Левая половина экрана — джойстик (сильнее вперёд — бег). Правая — обзор. Кнопки справа: действие, удар, прыжок, фонарик.</p>
+    <p class="small">Лучше играть в наушниках. Голоса — нейросетевые голоса твоего браузера (в Edge и Chrome звучат естественнее всего). Модели — KayKit (CC0). Музыка и звуки синтезируются прямо в игре.</p>
+  </div>
+</div>
+
+<div class="screen" id="pause" hidden>
+  <div class="panel">
+    <h2>Пауза</h2>
+    <div class="btns">
+      <button class="btn main" id="b-resume" type="button">Продолжить</button>
+      <button class="btn" id="b-voice" type="button">Озвучка: вкл</button>
+      <button class="btn" id="b-view" type="button">Вид: от третьего лица</button>
+      <button class="btn" id="b-restart" type="button">С контрольной точки</button>
+    </div>
+    <div class="ctrl">
+      <kbd>WASD</kbd><span>ходьба, Shift — бег, Пробел — прыжок</span>
+      <kbd>E · F · V</kbd><span>действие · фонарик · вид</span>
+      <kbd>H · J</kbd><span>подсказка · записки</span>
+    </div>
+  </div>
+</div>
+
+<div class="screen" id="end" hidden>
+  <div class="panel">
+    <div class="eyebrow" id="end-eyebrow"></div>
+    <h2 id="end-title"></h2>
+    <p class="lead" id="end-text"></p>
+    <div class="btns"><button class="btn main" id="b-end" type="button"></button></div>
+    <p class="small" id="end-credits"></p>
+  </div>
+</div>
+
+<div id="modal" hidden></div>
+
+<script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.js"></script>
+<script type="importmap">{ "imports": { "three": "./lib/three.module.min.js" } }</script>
+<script type="module" src="./js/main.js"></script>
+
+</body>
+</html>
