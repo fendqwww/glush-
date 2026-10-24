@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ферма">
+<meta name="theme-color" content="#07080a">
+<title>Подпольная ферма</title>
+<style>
+:root { --acc: #ffae1a; --bg: rgba(12,14,18,0.86); --bg2: rgba(255,255,255,0.05); --line: rgba(255,255,255,0.12); --up: #5be37d; --dn: #ff5a4a; --wn: #ffbe3a;
+  --sl: env(safe-area-inset-left, 0px); --sr: env(safe-area-inset-right, 0px); --sb: env(safe-area-inset-bottom, 0px); --st: env(safe-area-inset-top, 0px); }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #07080a; color: #e9ecef; font-family: -apple-system, "SF Pro Text", "Segoe UI", Roboto, Arial, sans-serif; touch-action: none; overscroll-behavior: none; }
+button { font: inherit; color: inherit; }
+#c { position: fixed; left: 0; top: 0; display: block; touch-action: none; }
+#loading { position: fixed; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: center; font: 800 16px -apple-system, Arial; letter-spacing: 3px; z-index: 90; background: #07080a; color: var(--acc); }
+.up { color: var(--up); } .dn { color: var(--dn); } .wn { color: var(--wn); }
+i { font-style: normal; }
+
+/* ===== меню ===== */
+.screen { position: fixed; top: 0; left: 0; right: 0; bottom: 0; display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 40; padding: 16px calc(16px + var(--sr)) calc(16px + var(--sb)) calc(16px + var(--sl)); }
+#menu { background: radial-gradient(ellipse at 50% 60%, rgba(0,0,0,0.05), rgba(0,0,0,0.75)); }
+.logo { font: 900 clamp(30px, 8vh, 58px)/0.95 "Arial Black", Impact, sans-serif; letter-spacing: 1px; text-align: center; text-shadow: 0 0 30px rgba(255,174,26,0.45), 0 4px 0 #000; }
+.logo span { color: var(--acc); display: block; font-size: 0.55em; letter-spacing: 6px; }
+.tag { margin: 10px 0 16px; font-size: 13px; opacity: 0.8; text-align: center; max-width: 520px; line-height: 1.45; text-shadow: 0 1px 3px #000; }
+.big { display: block; min-width: 230px; margin: 6px; padding: 14px 30px; font: 900 18px "Arial Black", Impact, sans-serif; letter-spacing: 2px; color: #111; background: var(--acc); border: 0; border-radius: 12px; cursor: pointer; box-shadow: 0 4px 0 #8a5a00, 0 0 30px rgba(255,174,26,0.3); }
+.big:active { transform: translateY(3px); box-shadow: 0 1px 0 #8a5a00; }
+.big.alt { background: #e3e6ea; box-shadow: 0 4px 0 #7b8088; }
+.mrow { display: flex; flex-wrap: wrap; justify-content: center; }
+.feat { display: flex; flex-wrap: wrap; justify-content: center; margin-top: 14px; max-width: 620px; }
+.feat b { font-size: 11px; font-weight: 600; padding: 5px 9px; margin: 3px; border-radius: 20px; background: rgba(0,0,0,0.55); border: 1px solid var(--line); }
+#pause, #modal, #raid { background: rgba(0,0,0,0.72); z-index: 60; }
+.box { background: #121519; border: 1px solid var(--line); border-radius: 16px; padding: 18px 22px; max-width: 440px; text-align: center; box-shadow: 0 10px 40px rgba(0,0,0,0.6); max-height: 92vh; overflow-y: auto; }
+.box h2 { margin: 0 0 8px; font: 900 24px "Arial Black", Impact, sans-serif; letter-spacing: 1px; }
+.box p { font-size: 14px; line-height: 1.5; opacity: 0.9; margin: 0 0 12px; }
+.box .big { margin: 8px auto; }
+
+/* ===== HUD ===== */
+#hud { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 10; pointer-events: none; }
+#hud > * { pointer-events: auto; }
+#top { position: absolute; top: calc(6px + var(--st)); left: calc(8px + var(--sl)); right: calc(8px + var(--sr)); display: flex; align-items: center; height: 40px; }
+.pill { display: flex; align-items: center; height: 38px; padding: 0 12px; margin-right: 6px; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); white-space: nowrap; }
+#hMoney { font: 800 17px -apple-system, Arial; letter-spacing: 0.3px; }
+#hProf { font: 700 12px -apple-system, Arial; margin-left: 8px; }
+#hDate { font-size: 12px; opacity: 0.85; }
+.sp { flex: 1; }
+.ib { width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; margin-left: 4px; border-radius: 11px; border: 1px solid var(--line); background: var(--bg); font: 800 12px -apple-system, Arial; cursor: pointer; padding: 0; }
+.ib.on { background: var(--acc); color: #111; border-color: var(--acc); }
+#chips { position: absolute; top: calc(52px + var(--st)); left: calc(8px + var(--sl)); display: flex; flex-direction: column; align-items: flex-start; pointer-events: none !important; }
+.chip { display: flex; align-items: center; margin-bottom: 4px; padding: 4px 9px; font: 700 12px -apple-system, Arial; background: rgba(10,12,15,0.7); border: 1px solid var(--line); border-radius: 9px; }
+.chip em { font-style: normal; opacity: 0.65; font-weight: 600; margin-right: 6px; font-size: 11px; }
+.chip.warn { border-color: var(--wn); color: var(--wn); } .chip.bad { border-color: var(--dn); color: var(--dn); animation: blink 0.8s infinite; }
+@keyframes blink { 50% { opacity: 0.55; } }
+.sus { width: 64px; height: 6px; border-radius: 3px; background: rgba(255,255,255,0.12); overflow: hidden; margin-right: 6px; }
+.sus i { display: block; height: 100%; width: 0; transition: width .4s; }
+#sCoin i { margin-left: 4px; font-size: 11px; }
+#tabs { position: absolute; left: calc(8px + var(--sl)); bottom: calc(6px + var(--sb)); display: flex; }
+#tabs button { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 62px; height: 50px; margin-right: 5px; border-radius: 13px; border: 1px solid var(--line); background: var(--bg); cursor: pointer; padding: 0; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+#tabs button b { font-size: 19px; line-height: 1; }
+#tabs button span { font: 700 8.5px -apple-system, Arial; letter-spacing: 0.4px; margin-top: 3px; opacity: 0.85; }
+#tabs button.on { background: var(--acc); color: #111; border-color: var(--acc); }
+#ticker { position: absolute; left: calc(8px + var(--sl)); bottom: calc(62px + var(--sb)); max-width: 52vw; font-size: 11px; opacity: 0.8; pointer-events: none !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 3px #000; }
+#ticker .good { color: #b8f5c8; } #ticker .bad { color: #ffc2b8; }
+#alerts { position: absolute; top: calc(52px + var(--st)); left: 50%; transform: translateX(-50%); }
+body.pan #alerts { top: auto; bottom: calc(64px + var(--sb)); left: calc(8px + var(--sl)); transform: none; }
+.alert { display: flex; align-items: center; padding: 6px 6px 6px 14px; background: rgba(120,14,10,0.92); border: 1px solid #ff5a4a; border-radius: 12px; box-shadow: 0 0 30px rgba(255,40,20,0.4); white-space: nowrap; }
+.alert.soft { background: rgba(30,32,38,0.92); border-color: var(--line); box-shadow: none; padding-right: 14px; }
+.alert b { font-size: 13px; margin-right: 8px; } .alert span { font-size: 11px; opacity: 0.85; margin-right: 8px; }
+.alert button { padding: 8px 12px; border-radius: 9px; border: 0; background: #fff; color: #111; font-weight: 900; font-size: 12px; cursor: pointer; }
+#toasts { position: fixed; top: calc(98px + var(--st)); left: 0; right: 0; display: flex; flex-direction: column; align-items: center; z-index: 30; pointer-events: none; }
+body.pan #toasts { right: min(420px, 50vw); }
+.toast { font: 600 13px -apple-system, Arial; padding: 7px 14px; margin: 3px; background: rgba(10,12,15,0.85); border-left: 3px solid #9aa4b0; border-radius: 8px; transition: opacity .6s, transform .6s; max-width: 70vw; text-align: center; }
+.toast.good { border-color: var(--up); } .toast.bad { border-color: var(--dn); }
+.toast.out { opacity: 0; transform: translateY(-10px); }
+#hint { display: none; position: fixed; right: calc(8px + var(--sr)); bottom: calc(6px + var(--sb)); max-width: min(380px, calc(100vw - 440px)); min-width: 240px; z-index: 31; padding: 8px 10px; font-size: 12px !important; background: rgba(28,22,8,0.95); border: 1px solid var(--acc); border-radius: 12px; font-size: 13px; line-height: 1.4; align-items: flex-end; box-shadow: 0 0 25px rgba(255,174,26,0.25); }
+body.pan #hint { right: auto; left: calc(8px + var(--sl)); bottom: calc(62px + var(--sb)); max-width: min(380px, calc(50vw - 30px)); }
+#hint button { margin-left: 10px; padding: 8px 14px; border-radius: 9px; border: 0; background: var(--acc); color: #111; font-weight: 900; cursor: pointer; flex-shrink: 0; }
+
+/* ===== боковая панель ===== */
+#panel { position: fixed; top: calc(52px + var(--st)); right: calc(8px + var(--sr)); bottom: calc(6px + var(--sb)); width: min(410px, calc(50vw - 16px)); z-index: 20; display: flex; flex-direction: column; background: rgba(14,16,20,0.94); border: 1px solid var(--line); border-radius: 16px; transform: translateX(110%); transition: transform .22s ease; box-shadow: -10px 0 40px rgba(0,0,0,0.5); }
+#panel.on { transform: none; }
+#phead { display: flex; align-items: center; padding: 10px 10px 8px 14px; border-bottom: 1px solid var(--line); }
+#ptitle { flex: 1; font: 900 15px "Arial Black", Impact, sans-serif; letter-spacing: 1px; }
+#pclose { width: 34px; height: 34px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg2); cursor: pointer; font-size: 15px; }
+#pbody { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; touch-action: pan-y; padding: 8px 12px 16px; }
+#pbody h4 { margin: 12px 0 6px; font: 800 11px -apple-system, Arial; letter-spacing: 1.2px; color: var(--acc); }
+#pbody h4 i { color: #9aa4b0; font-weight: 600; letter-spacing: 0; margin-left: 4px; }
+#pbody button { padding: 8px 10px; border-radius: 9px; border: 1px solid rgba(255,174,26,0.6); background: rgba(255,174,26,0.16); font: 700 12px -apple-system, Arial; cursor: pointer; white-space: nowrap; }
+#pbody button:active { transform: scale(0.96); }
+#pbody button.ghost { border-color: var(--line); background: var(--bg2); }
+#pbody button.off { opacity: 0.35; pointer-events: none; }
+#pbody button.sel { background: var(--acc); color: #111; border-color: var(--acc); }
+#pbody button.sel b { color: #111 !important; }
+#pbody button.hot { background: #e2392b; border-color: #ff7a6a; color: #fff; }
+#pbody button.wide { display: block; width: 100%; margin-top: 8px; padding: 11px; }
+.sum { display: flex; margin: 4px -3px 6px; }
+.sum > div { flex: 1; margin: 3px; padding: 8px 6px; border-radius: 10px; background: var(--bg2); text-align: center; min-width: 0; }
+.sum b { display: block; font: 800 15px -apple-system, Arial; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sum span { display: block; font-size: 10px; opacity: 0.6; margin-top: 2px; }
+.coins { display: flex; margin: 0 -3px; }
+.ctile { flex: 1; margin: 3px; padding: 8px; border-radius: 10px; background: var(--bg2); border: 1px solid var(--line); text-align: center; cursor: pointer; }
+.ctile.best { border-color: var(--up); box-shadow: inset 0 0 0 1px var(--up); }
+.ctile b { display: block; font-size: 14px; } .ctile span { display: block; font-weight: 700; font-size: 13px; margin: 2px 0; } .ctile i { font-size: 10px; opacity: 0.6; }
+.row, .item, .card, .rigrow { display: flex; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
+.row > span, .item > div:first-child, .card > div:first-child { flex: 1; min-width: 0; padding-right: 8px; font-size: 12px; line-height: 1.4; }
+.item b, .card b { display: block; font-size: 13px; }
+.item span, .card span { display: block; font-size: 11px; opacity: 0.75; margin-top: 2px; }
+.item .note { opacity: 0.5; font-style: italic; }
+.item.cur b { color: var(--up); }
+.item em, .rigrow em { font-style: normal; color: var(--up); font-weight: 900; padding: 0 6px; }
+.bb { display: flex; flex-direction: column; align-items: stretch; }
+.bb button + button { margin-top: 4px; }
+.sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; vertical-align: 0; }
+.rigrow { cursor: pointer; border-radius: 10px; padding: 9px 8px; margin: 3px 0; background: var(--bg2); border: 0; }
+.rigrow > b { width: 34px; font-size: 14px; } .rigrow > span { flex: 1; font-size: 12px; } .rigrow > i { font-weight: 800; font-size: 12px; margin-left: 6px; } .rigrow > em { color: #9aa4b0; font-size: 18px; }
+.seg { display: flex; margin: 0 -3px; }
+.seg button { flex: 1; margin: 3px; white-space: normal !important; line-height: 1.25; }
+.seg button i { font-size: 10px; opacity: 0.75; font-weight: 600; }
+.tgl { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; margin-top: 10px; border-radius: 10px; background: var(--bg2); cursor: pointer; font-size: 13px; font-weight: 600; }
+.tgl b { padding: 4px 10px; border-radius: 7px; background: #333a44; font-size: 11px; }
+.tgl b.on { background: var(--up); color: #062; }
+.tip { font-size: 11px; opacity: 0.6; line-height: 1.45; margin: 6px 0; }
+.warnbox { font-size: 12px; padding: 8px 10px; border-radius: 10px; background: rgba(255,90,74,0.13); border: 1px solid rgba(255,90,74,0.5); line-height: 1.4; }
+.back { display: inline-block; padding: 6px 2px; color: var(--acc); font-weight: 700; font-size: 13px; cursor: pointer; }
+.bar { height: 8px; border-radius: 4px; background: rgba(255,255,255,0.08); overflow: hidden; margin: 4px 0 6px; }
+.bar i { display: block; height: 100%; border-radius: 4px; }
+.coinbox { margin: 8px 0; padding: 10px; border-radius: 12px; background: var(--bg2); }
+.coinbox canvas { width: 100%; height: 60px; display: block; margin: 6px 0 2px; }
+.coinbox .row { border: 0; padding: 4px 0; }
+.ch { display: flex; align-items: baseline; } .ch b { font-size: 15px; margin-right: 8px; } .ch span { font-weight: 800; font-size: 14px; flex: 1; } .ch i { font-size: 11px; font-weight: 700; margin-left: 8px; }
+@media (max-height: 430px) {
+  #tabs button { width: 54px; height: 44px; } #tabs button b { font-size: 17px; }
+  #ticker { bottom: calc(54px + var(--sb)); }
+  #hint { bottom: calc(74px + var(--sb)); }
+  .chip { padding: 3px 8px; font-size: 11px; margin-bottom: 3px; }
+}
+@media (max-width: 700px) { #hProf { display: none; } #hDate { font-size: 11px; } .pill { padding: 0 9px; } }
+#rotate { position: fixed; top: 0; left: 0; right: 0; bottom: 0; display: none; z-index: 95; background: #07080a; align-items: center; justify-content: center; flex-direction: column; font: 700 16px -apple-system, Arial; text-align: center; padding: 20px; }
+#rotate .ph { width: 46px; height: 80px; border: 3px solid var(--acc); border-radius: 9px; margin-bottom: 18px; animation: rot 1.8s infinite; }
+@keyframes rot { 0%,30% { transform: rotate(0); } 60%,100% { transform: rotate(90deg); } }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="loading">КОПАЕМ ПОДВАЛ…</div>
+
+<div id="menu" class="screen">
+  <div class="logo">ПОДПОЛЬНАЯ<span>ФЕРМА</span></div>
+  <div class="tag">собери майнинг-ферму в подвале хрущёвки. закупай видеокарты, следи за курсом крипты и доллара, ценой света, жарой и соседями. цель — 10 миллионов и не попасться.</div>
+  <div class="mrow"><button class="big" id="bCont">ПРОДОЛЖИТЬ</button><button class="big alt" id="bNew">НОВАЯ ФЕРМА</button></div>
+  <div class="feat"><b>📈 3 монеты и курс $</b><b>⚡ тарифы и врезки</b><b>❄️ вытяжки и иммерсия</b><b>🔥 пожары</b><b>🚨 рейды</b><b>🏚️ 3 этажа подземелья</b></div>
+</div>
+
+<div id="pause" class="screen"><div class="box"><h2>ПАУЗА</h2><p>ферма сохраняется сама каждые несколько секунд</p><button class="big" id="bResume">ПРОДОЛЖИТЬ</button><button class="big alt" id="bMute">ЗВУК: ВКЛ</button><button class="big alt" id="bMenu2">В ГЛАВНОЕ МЕНЮ</button></div></div>
+<div id="modal" class="screen"><div class="box"><h2 id="mTitle"></h2><p id="mBody"></p><button class="big" id="mOk">ПОНЯТНО</button></div></div>
+<div id="raid" class="screen"><div class="box"><h2>📹 ПРОВЕРКА ЧЕРЕЗ 3 ДНЯ</h2><p>сторож видел, как у подъезда крутились люди в форме и мужик с планшетом из энергосбыта. что делаем?</p>
+  <button class="big" id="raidBribe" data-a="bribe">ЗАНЕСТИ <span id="raidCost"></span></button>
+  <button class="big alt" data-a="hide">СВЕРНУТЬ ФЕРМУ НА 4 ДНЯ</button>
+  <button class="big alt" data-a="risk">РИСКНУТЬ</button></div></div>
+
+<div id="hud">
+  <div id="top">
+    <div class="pill"><span id="hMoney">0 ₽</span><span id="hProf"></span></div>
+    <div class="pill"><span id="hDate"></span></div>
+    <div class="sp"></div>
+    <button class="ib" id="bPauseT" data-a="speed" data-v="0">❚❚</button>
+    <button class="ib" data-a="speed" data-v="1">▶</button>
+    <button class="ib" data-a="speed" data-v="3">▶▶</button>
+    <button class="ib" data-a="speed" data-v="8">▶▶▶</button>
+    <button class="ib" id="bSound" data-a="mute">🔊</button>
+    <button class="ib" data-a="menu">☰</button>
+  </div>
+  <div id="chips">
+    <div class="chip"><em>🌡 подвал</em><span id="sTemp"></span></div>
+    <div class="chip"><em>🌨 улица</em><span id="sOut"></span></div>
+    <div class="chip"><em>⚡ кВт</em><span id="sKw"></span></div>
+    <div class="chip"><em>👁 палево</em><div class="sus"><i id="sSus"></i></div><span id="sSusT"></span></div>
+    <div class="chip"><em>🏆</em><span id="sCoin"></span></div>
+    <div class="chip"><em>💵 USD</em><span id="sUsd"></span></div>
+  </div>
+  <div id="alerts"></div>
+  <div id="ticker"></div>
+  <div id="tabs">
+    <button data-tab="farm"><b>⛏️</b><span>ФЕРМА</span></button>
+    <button data-tab="shop"><b>🛒</b><span>МАГАЗИН</span></button>
+    <button data-tab="market"><b>📈</b><span>БИРЖА</span></button>
+    <button data-tab="power"><b>⚡</b><span>ЭНЕРГИЯ</span></button>
+    <button data-tab="climate"><b>🌡️</b><span>КЛИМАТ</span></button>
+    <button data-tab="ups"><b>🏚️</b><span>ПОДВАЛ</span></button>
+  </div>
+</div>
+<div id="panel"><div id="phead"><div id="ptitle"></div><button id="pclose">✕</button></div><div id="pbody"></div></div>
+<div id="toasts"></div>
+<div id="hint"><span id="hintT"></span><button data-a="hint">ОК</button></div>
+<div id="rotate"><div class="ph"></div>поверни телефон горизонтально</div>
+<script src="game.js"></script>
+</body>
+</html>

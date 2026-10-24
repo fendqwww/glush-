@@ -1,0 +1,11 @@
+{
+  "name": "mining-farm",
+  "private": true,
+  "scripts": {
+    "build": "esbuild src/main.js --bundle --format=iife --target=safari11 --minify --outfile=game.js"
+  },
+  "devDependencies": {
+    "esbuild": "0.24.0",
+    "three": "0.162.0"
+  }
+}
