@@ -18,16 +18,32 @@ export class Input {
     layer.addEventListener('touchmove', e => this.tm(e), opt);
     layer.addEventListener('touchend', e => this.te(e), opt);
     layer.addEventListener('touchcancel', e => this.te(e), opt);
-    // мышь для отладки на ПК
-    let mouse = null;
-    layer.addEventListener('mousedown', e => { mouse = { identifier: 'm', clientX: e.clientX, clientY: e.clientY }; this.ts({ changedTouches: [mouse], preventDefault() {} }); });
-    window.addEventListener('mousemove', e => { if (mouse) { mouse.clientX = e.clientX; mouse.clientY = e.clientY; this.tm({ changedTouches: [mouse], preventDefault() {} }); } });
-    window.addEventListener('mouseup', () => { if (mouse) { this.te({ changedTouches: [mouse], preventDefault() {} }); mouse = null; } });
+    // ПК: мышь захватывается — движение крутит курс и подвес камеры, клик = подрыв/сброс
+    this.dyaw = 0; this.gimbal = -0.1; this.mouseSens = 1;
+    this.locked = false;
+    const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+    this.layer = layer;
+    if (!isTouch) {
+      layer.addEventListener('mousedown', e => {
+        if (!this.enabled) return;
+        if (!this.locked && layer.requestPointerLock) { try { layer.requestPointerLock(); } catch (er) { /* нет поддержки */ } }
+        else if (e.button === 0) this.actions.push('drop');
+        else if (e.button === 2) this.actions.push('cam');
+      });
+      layer.addEventListener('contextmenu', e => e.preventDefault());
+      document.addEventListener('pointerlockchange', () => { this.locked = document.pointerLockElement === layer; });
+      window.addEventListener('mousemove', e => {
+        if (!this.locked || !this.enabled) return;
+        this.dyaw += (e.movementX || 0) * 0.0022 * this.mouseSens;
+        this.gimbal = Math.max(-1.35, Math.min(0.6, this.gimbal - (e.movementY || 0) * 0.0022 * this.mouseSens));
+      });
+    }
     window.addEventListener('keydown', e => {
       this.keys[e.code] = true;
-      const map = { Space: 'drop', KeyC: 'cam', KeyF: 'mode', KeyP: 'pause', Escape: 'pause', KeyR: 'restart', KeyM: 'map' };
+      const map = { Space: 'drop', KeyC: 'cam', KeyF: 'mode', KeyP: 'pause', KeyR: 'restart', KeyT: 'thermal', KeyG: 'grade' };
       if (map[e.code] && !e.repeat) this.actions.push(map[e.code]);
-      if (e.code === 'Space' || e.code.indexOf('Arrow') === 0) e.preventDefault();
+      if (e.code === 'Escape' && !this.locked) this.actions.push('pause');
+      if (e.code === 'Space' || e.code.indexOf('Arrow') === 0 || e.code === 'Tab') e.preventDefault();
     });
     window.addEventListener('keyup', e => { this.keys[e.code] = false; });
     this.padPrev = [];
@@ -97,15 +113,26 @@ export class Input {
       pitch = clamp(-(this.Rt.y - this.Rt.oy) / R);
     }
     // клавиатура
-    if (k.KeyW || k.KeyS) {
-      if (this.mode === 'ACRO') { this.thrAcro = Math.max(0, Math.min(1, this.thrAcro + ((k.KeyW ? 1 : 0) - (k.KeyS ? 1 : 0)) * dt * 0.8)); thr = this.thrAcro; }
-      else thr = k.KeyW ? 0.92 : 0.08;
+    let boost = !!(k.ShiftLeft || k.ShiftRight);
+    if (this.mode === 'EASY') {
+      // WASD — полёт, E/Q — вверх/вниз, стрелки — поворот и подвес камеры
+      if (k.KeyW) pitch = 1; if (k.KeyS) pitch = -1;
+      if (k.KeyA) roll = -1; if (k.KeyD) roll = 1;
+      if (k.KeyE) thr = 1; if (k.KeyQ || k.KeyZ) thr = 0;
+      if (k.ArrowLeft) yaw = -0.8; if (k.ArrowRight) yaw = 0.8;
+      if (k.ArrowUp) this.gimbal = Math.min(0.6, this.gimbal + dt * 1.2);
+      if (k.ArrowDown) this.gimbal = Math.max(-1.35, this.gimbal - dt * 1.2);
+    } else {
+      if (k.KeyW || k.KeyS) {
+        if (this.mode === 'ACRO') { this.thrAcro = Math.max(0, Math.min(1, this.thrAcro + ((k.KeyW ? 1 : 0) - (k.KeyS ? 1 : 0)) * dt * 0.8)); thr = this.thrAcro; }
+        else thr = k.KeyW ? 0.92 : 0.08;
+      }
+      if (k.KeyX && this.mode === 'ANGLE') thr = 0;
+      if (k.KeyA) yaw = -1; if (k.KeyD) yaw = 1;
+      if (k.ArrowUp) pitch = 1; if (k.ArrowDown) pitch = -1;
+      if (k.ArrowLeft) roll = -1; if (k.ArrowRight) roll = 1;
+      if (k.KeyQ) yaw = -1; if (k.KeyE) yaw = 1;
     }
-    if (k.KeyX && this.mode === 'ANGLE') thr = 0;
-    if (k.KeyA) yaw = -1; if (k.KeyD) yaw = 1;
-    if (k.ArrowUp) pitch = 1; if (k.ArrowDown) pitch = -1;
-    if (k.ArrowLeft) roll = -1; if (k.ArrowRight) roll = 1;
-    if (k.KeyQ) yaw = -1; if (k.KeyE) yaw = 1;
     // геймпад (Mode 2)
     const pads = navigator.getGamepads ? navigator.getGamepads() : [];
     for (const p of pads) {
@@ -117,7 +144,8 @@ export class Input {
         thr = this.mode === 'ACRO' ? (1 - p.axes[1]) / 2 : 0.5 - p.axes[1] * 0.5;
         if (this.mode === 'ACRO') this.thrAcro = thr;
       }
-      const btn = [[0, 'drop'], [1, 'cam'], [2, 'mode'], [9, 'pause'], [3, 'restart']];
+      if (p.buttons[6] && p.buttons[6].value > 0.5) boost = true;
+      const btn = [[0, 'drop'], [1, 'cam'], [2, 'mode'], [9, 'pause'], [3, 'thermal']];
       for (const [i, a] of btn) {
         const pr = p.buttons[i] && p.buttons[i].pressed;
         if (pr && !this.padPrev[i]) this.actions.push(a);
@@ -126,7 +154,8 @@ export class Input {
       break;
     }
     const sens = this.sens;
-    s.thr = thr; s.yaw = yaw * sens; s.pitch = clamp(pitch * sens); s.roll = clamp(roll * sens);
+    s.thr = thr; s.yaw = yaw * sens; s.pitch = clamp(pitch * sens); s.roll = clamp(roll * sens); s.boost = boost;
+    s.dyaw = this.dyaw; this.dyaw = 0;
     return s;
   }
 

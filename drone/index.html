@@ -53,7 +53,12 @@ h3 { font: bold 11px "Courier New", monospace; letter-spacing: 3px; color: var(-
 #bCam { right: calc(110px + var(--sr)); top: 12px; width: 50px; height: 50px; top: auto; bottom: calc(46% + 22px); }
 #bMode { right: calc(20px + var(--sr)); top: 64px; width: 50px; height: 50px; font-size: 9px; top: auto; bottom: calc(46% + 96px); }
 #bPause { left: calc(50% - 22px); top: auto; bottom: calc(6px + var(--sb)); width: 44px; height: 44px; border-radius: 10px; font-size: 14px; left: calc(50% + 120px); }
-.desktop .btn { opacity: 0.6; }
+.desktop .btn, .desktop .stick-base { display: none; }
+#bTpv { right: calc(110px + var(--sr)); bottom: calc(46% + 96px); width: 50px; height: 50px; font-size: 10px; }
+.btn.on { background: rgba(255,255,255,0.75); color: #111; }
+#keys { display: none; position: absolute; left: 0; right: 0; bottom: 10px; text-align: center; font: bold 11px "Courier New", monospace; color: rgba(255,255,255,0.7); text-shadow: 0 1px 2px #000; pointer-events: none; }
+.desktop #keys { display: block; }
+.help b { color: var(--acc); }
 #toasts { position: fixed; top: 22%; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; z-index: 8; pointer-events: none; }
 .toast { font: bold 14px "Courier New", monospace; padding: 5px 12px; margin: 3px; background: rgba(0,0,0,0.55); border-left: 3px solid #fff; transition: opacity .6s, transform .6s; max-width: 86vw; text-align: center; }
 .toast.good { border-color: #6f6; color: #cfc; }
@@ -91,14 +96,15 @@ h3 { font: bold 11px "Courier New", monospace; letter-spacing: 3px; color: var(-
       <div class="opt" id="optSens"></div>
       <div class="opt" id="optSound"></div>
       <div class="opt" id="optQ"></div>
+      <div class="opt" id="optTod"></div>
       <div class="opt" id="fs">НА ВЕСЬ ЭКРАН</div>
     </div>
     <button class="big" id="start">ВЗЛЁТ</button>
     <div id="a2hs">совет: «Поделиться → На экран Домой» — игра откроется без панелей Safari</div>
     <div class="help">
-      левый стик: газ ↕ и поворот ↔ · правый стик: наклоны · ANGLE — стабилизация и удержание высоты, ACRO — как настоящий FPV<br>
-      ПК: W/S газ, A/D поворот, стрелки наклон, ПРОБЕЛ подрыв/сброс, C камера, F режим, P пауза, R рестарт · геймпад тоже работает<br>
-      влетай в дома через окна и двери, бей танки в крышу и корму, держись подальше от ЗСУ, РЭБ глушит сигнал — оптоволокну он не страшен
+      <b>телефон (ЛЁГКИЙ режим):</b> правый стик — лететь вперёд/назад/вбок, левый — вверх/вниз и поворот; отпустил — дрон сам тормозит и висит<br>
+      <b>ПК:</b> кликни по экрану — мышь крутит камеру · WASD полёт туда, куда смотришь · E вверх, Q вниз · SHIFT ускорение · ЛКМ/ПРОБЕЛ подрыв или сброс · ПКМ/C камера · T тепловизор · F режим полёта · ESC пауза<br>
+      бей танки в крышу и корму · РЭБ глушит сигнал (оптоволокну не страшен) · ночью включай тепловизор
     </div>
   </div>
 </div>
@@ -111,6 +117,8 @@ h3 { font: bold 11px "Courier New", monospace; letter-spacing: 3px; color: var(-
   <div class="btn" id="bCam">КАМ</div>
   <div class="btn" id="bMode">ANGLE</div>
   <div class="btn" id="bPause">❚❚</div>
+  <div class="btn" id="bTpv">ТПВ</div>
+  <div id="keys">WASD — полёт · мышь — камера · E/Q — вверх/вниз · SHIFT — ускорение · ЛКМ — подрыв · T — тепловизор · C — камера · ESC — пауза</div>
 </div>
 <div id="toasts"></div>
 

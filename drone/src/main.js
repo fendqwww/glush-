@@ -8,6 +8,7 @@ import { Post } from './post.js';
 import { Input } from './input.js';
 import { Audio } from './audio.js';
 import { MODES, setupMode, fmt } from './modes.js';
+import { vehicleMats } from './models.js';
 
 const $ = id => document.getElementById(id);
 const store = {
@@ -16,7 +17,11 @@ const store = {
 };
 
 const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-const settings = Object.assign({ quality: isTouch ? 0 : 1, analog: true, sens: 1, sound: true, mode: 'ANGLE', drone: null }, store.get('settings', {}));
+const settings = Object.assign({ quality: isTouch ? 0 : 1, analog: true, sens: 1, sound: true, mode: 'EASY', drone: null, tod: 0 }, store.get('settings', {}));
+// новый лёгкий режим по умолчанию у всех
+if (settings.v !== 2) { settings.mode = 'EASY'; settings.v = 2; settings.analog = true; }
+const MODE_NAME = { EASY: 'ЛЁГКИЙ', ANGLE: 'ANGLE', ACRO: 'ACRO' };
+const TOD_NAME = ['ДЕНЬ', 'ЗАКАТ', 'НОЧЬ'];
 
 class Game {
   constructor() {
@@ -46,6 +51,8 @@ class Game {
     this.vehicles = new Vehicles(scene, this.world, this.fx);
     this.drone = new Drone(scene, settings.drone || 'kamikaze');
     this.post = new Post(renderer);
+    this.post.mat.uniforms.exposure.value = this.exposure;
+    this.thermal = false;
     this.audio = new Audio();
     this.audio.setMute(!settings.sound);
     this.gates = [];
@@ -93,25 +100,29 @@ class Game {
     const g = new THREE.SphereGeometry(1200, 32, 16);
     const m = new THREE.ShaderMaterial({
       side: THREE.BackSide, depthWrite: false, fog: false,
-      uniforms: { sun: { value: sun }, time: { value: 0 } },
+      uniforms: { sun: { value: sun }, time: { value: 0 }, zen: { value: new THREE.Color() }, hor: { value: new THREE.Color() }, gnd: { value: new THREE.Color() }, sunI: { value: 1 }, stars: { value: 0 }, thermal: { value: 0 } },
       vertexShader: 'varying vec3 vD; void main(){ vD = normalize(position); vec4 p = modelViewMatrix * vec4(position,1.0); gl_Position = projectionMatrix * p; gl_Position.z = gl_Position.w * 0.9999; }',
       fragmentShader: `
-        uniform vec3 sun; uniform float time; varying vec3 vD;
+        uniform vec3 sun, zen, hor, gnd; uniform float time, sunI, stars, thermal; varying vec3 vD;
         void main(){
           vec3 d = normalize(vD);
           float h = max(d.y, 0.0);
-          vec3 zen = vec3(0.10, 0.22, 0.48), hor = vec3(0.78, 0.74, 0.70), gnd = vec3(0.30, 0.30, 0.28);
           vec3 c = mix(hor, zen, pow(h, 0.55));
           if (d.y < 0.0) c = mix(hor, gnd, min(1.0, -d.y * 6.0));
           float s = max(dot(d, sun), 0.0);
-          c += vec3(1.0, 0.8, 0.55) * pow(s, 8.0) * 0.45;
-          c += vec3(1.0, 0.9, 0.7) * pow(s, 900.0) * 30.0;
-          c += vec3(1.0, 0.7, 0.4) * pow(1.0 - h, 6.0) * pow(s, 2.0) * 0.4;
+          c += vec3(1.0, 0.8, 0.55) * pow(s, 8.0) * 0.45 * sunI;
+          c += vec3(1.0, 0.9, 0.7) * pow(s, 900.0) * 30.0 * max(sunI, 0.15);
+          c += vec3(1.0, 0.7, 0.4) * pow(1.0 - h, 6.0) * pow(s, 2.0) * 0.4 * sunI;
+          // звёзды
+          vec3 sd = floor(d * 300.0);
+          float st = fract(sin(dot(sd, vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+          c += vec3(step(0.9975, st) * stars * smoothstep(0.0, 0.2, d.y) * (0.6 + 0.4 * sin(time * 3.0 + st * 100.0)));
           // облака
           vec2 uv = d.xz / max(0.08, d.y) * 0.6 + vec2(time * 0.006, time * 0.002);
           float n = sin(uv.x * 1.3 + sin(uv.y * 0.7)) * sin(uv.y * 1.1 + sin(uv.x * 0.9)) + 0.5 * sin(uv.x * 3.1 - uv.y * 2.3);
           float cl = smoothstep(0.35, 1.0, n) * smoothstep(0.0, 0.25, d.y) * 0.65;
-          c = mix(c, vec3(0.95, 0.93, 0.9) + vec3(0.2, 0.12, 0.0) * pow(s, 4.0), cl);
+          c = mix(c, (vec3(0.95, 0.93, 0.9) + vec3(0.2, 0.12, 0.0) * pow(s, 4.0)) * mix(hor * 1.2, vec3(1.0), sunI), cl);
+          if (thermal > 0.5) c = vec3(0.06 + h * 0.04);
           gl_FragColor = vec4(c * 1.15, 1.0);
         }`,
     });
@@ -121,7 +132,7 @@ class Game {
     this.sky = sky;
     this.scene.add(sky);
     this.scene.fog = new THREE.Fog(0xb4b2ad, 60, 900);
-    const hemi = new THREE.HemisphereLight(0xc8d6f0, 0x6a5e48, 1.7);
+    const hemi = this.hemi = new THREE.HemisphereLight(0xc8d6f0, 0x6a5e48, 1.7);
     this.scene.add(hemi);
     const dl = this.sunLight = new THREE.DirectionalLight(0xfff0dc, 3.0);
     dl.castShadow = true;
@@ -134,6 +145,50 @@ class Game {
     dl.shadow.normalBias = 0.03;
     this.scene.add(dl); this.scene.add(dl.target);
     this.shadowExt = ext;
+    this.applyTime(settings.tod || 0);
+  }
+
+  // время суток: день, закат, ночь
+  applyTime(t) {
+    const P = [
+      { sun: [-0.5, 0.68, -0.6], si: 3.0, sc: 0xfff0dc, hi: 1.7, hs: 0xc8d6f0, hg: 0x6a5e48, fog: 0xb4b2ad, f0: 60, f1: 900, zen: [0.10, 0.22, 0.48], hor: [0.78, 0.74, 0.70], gnd: [0.3, 0.3, 0.28], glow: 1, stars: 0, exp: 1 },
+      { sun: [-0.72, 0.26, -0.67], si: 2.8, sc: 0xffa860, hi: 1.5, hs: 0x9aa8d0, hg: 0x5a4838, fog: 0xb08870, f0: 40, f1: 750, zen: [0.10, 0.14, 0.34], hor: [1.0, 0.58, 0.34], gnd: [0.25, 0.2, 0.18], glow: 1.4, stars: 0, exp: 1.12 },
+      { sun: [0.35, 0.55, -0.6], si: 1.1, sc: 0xa8bcff, hi: 1.0, hs: 0x6070b0, hg: 0x24242a, fog: 0x101622, f0: 25, f1: 480, zen: [0.006, 0.01, 0.03], hor: [0.035, 0.045, 0.08], gnd: [0.02, 0.02, 0.025], glow: 0.08, stars: 1, exp: 2.2 },
+    ][t];
+    this.sunDir.set(P.sun[0], P.sun[1], P.sun[2]).normalize();
+    this.sunLight.intensity = P.si; this.sunLight.color.setHex(P.sc);
+    this.hemi.intensity = P.hi; this.hemi.color.setHex(P.hs); this.hemi.groundColor.setHex(P.hg);
+    this.scene.fog.color.setHex(P.fog); this.scene.fog.near = P.f0; this.scene.fog.far = P.f1;
+    const u = this.sky.material.uniforms;
+    u.zen.value.setRGB(P.zen[0], P.zen[1], P.zen[2]); u.hor.value.setRGB(P.hor[0], P.hor[1], P.hor[2]); u.gnd.value.setRGB(P.gnd[0], P.gnd[1], P.gnd[2]);
+    u.sunI.value = P.glow; u.stars.value = P.stars;
+    this.exposure = P.exp;
+    this.night = t === 2;
+    // ночью фары и огни светятся
+    const vm = vehicleMats();
+    vm.light.emissive.setHex(this.night ? 0xfff0c0 : 0x403a28);
+    vm.light.emissiveIntensity = this.night ? 2.5 : 1;
+    if (this.post) this.post.mat.uniforms.exposure.value = this.exposure * (this.thermal ? (this.night ? 2.6 : 0.8) : 1);
+  }
+
+  // тепловизор: техника и пожары светятся белым, всё холодное тёмное
+  setThermal(on) {
+    this.thermal = on;
+    const vm = vehicleMats();
+    const hot = [vm.green, vm.sand, vm.olive, vm.dark, vm.rubber, vm.canvas, vm.steel, vm.glass, vm.white, vm.wood].concat(vm.paint);
+    for (const mt of hot) {
+      if (!mt.userData.e0) mt.userData.e0 = mt.emissive.getHex();
+      mt.emissive.setHex(on ? 0xffffff : mt.userData.e0);
+      mt.emissiveIntensity = on ? 1.6 : 1;
+    }
+    if (!vm.burnt.userData.e0) vm.burnt.userData.e0 = vm.burnt.emissive.getHex();
+    vm.burnt.emissive.setHex(on ? 0xd0d0d0 : vm.burnt.userData.e0);
+    for (const v of this.vehicles.list) if (v.mesh.userData.trackMat) v.mesh.userData.trackMat.emissive.setHex(on ? 0x8a8a8a : 0);
+    this.post.mat.uniforms.thermal.value = on ? 1 : 0;
+    // ТПВ сам подстраивает усиление под время суток
+    this.post.mat.uniforms.exposure.value = this.exposure * (on ? (this.night ? 2.6 : 0.8) : 1);
+    this.sky.material.uniforms.thermal.value = on ? 1 : 0;
+    $('bTpv').classList.toggle('on', on);
   }
 
   buildPad() {
@@ -205,7 +260,8 @@ class Game {
       el.onclick = () => { this.changeSetting(key); upd(); };
       upd();
     };
-    tog('optFlight', 'mode', v => `ПОЛЁТ: ${v}`);
+    tog('optFlight', 'mode', v => `ПОЛЁТ: ${MODE_NAME[v]}`);
+    tog('optTod', 'tod', v => `ВРЕМЯ: ${TOD_NAME[v || 0]}`);
     tog('optAnalog', 'analog', v => `АНАЛОГ: ${v ? 'ВКЛ' : 'ВЫКЛ'}`);
     tog('optSens', 'sens', v => `ЧУВСТВ.: ${Math.round(v * 100)}%`);
     tog('optSound', 'sound', v => `ЗВУК: ${v ? 'ВКЛ' : 'ВЫКЛ'}`);
@@ -216,7 +272,9 @@ class Game {
       el.addEventListener('touchstart', f, { passive: false });
       el.addEventListener('mousedown', f);
     };
-    btn('bFire', 'drop'); btn('bCam', 'cam'); btn('bMode', 'mode'); btn('bPause', 'pause');
+    btn('bFire', 'drop'); btn('bCam', 'cam'); btn('bMode', 'mode'); btn('bPause', 'pause'); btn('bTpv', 'thermal');
+    // ПК: потеря захвата мыши = пауза
+    document.addEventListener('pointerlockchange', () => { if (!isTouch && !document.pointerLockElement && this.state === 'play') this.pause(true); });
     $('resume').onclick = () => this.pause(false);
     $('quit').onclick = () => this.toMenu();
     $('again').onclick = () => this.start();
@@ -253,7 +311,8 @@ class Game {
   }
 
   changeSetting(key) {
-    if (key === 'mode') settings.mode = settings.mode === 'ANGLE' ? 'ACRO' : 'ANGLE';
+    if (key === 'mode') settings.mode = { EASY: 'ANGLE', ANGLE: 'ACRO', ACRO: 'EASY' }[settings.mode] || 'EASY';
+    if (key === 'tod') { settings.tod = ((settings.tod || 0) + 1) % 3; this.applyTime(settings.tod); }
     if (key === 'analog') settings.analog = !settings.analog;
     if (key === 'sens') settings.sens = settings.sens >= 1.4 ? 0.6 : Math.round((settings.sens + 0.2) * 10) / 10;
     if (key === 'sound') { settings.sound = !settings.sound; this.audio.setMute(!settings.sound); }
@@ -298,6 +357,9 @@ class Game {
     this.bombs.forEach(b => this.scene.remove(b.mesh)); this.bombs.length = 0;
     this.drone.setType(this.selDrone);
     this.drone.mode = settings.mode;
+    this.drone.lookFly = !isTouch;
+    this.input.gimbal = isTouch ? -0.1 : -0.05;
+    this.lockMouse();
     this.M = setupMode(this, this.selMode);
     this.M.launched = 0;
     this.pad.visible = true;
@@ -326,7 +388,7 @@ class Game {
     this.inputQ.length = 0;
     M.launched++;
     if (M.id === 'race') { M.next = 0; M.started = false; M.lap = 0; this.updateGateColors(); }
-    $('bMode').textContent = settings.mode;
+    $('bMode').textContent = MODE_NAME[settings.mode];
   }
 
   addCablePoint(p) {
@@ -342,7 +404,11 @@ class Game {
     if (this.state === 'play' && this.drone.alive) {
       if (a === 'drop') this.fire();
       if (a === 'cam') this.cam = this.cam === 'fpv' ? 'chase' : 'fpv';
-      if (a === 'mode') { this.changeSetting('mode'); $('bMode').textContent = settings.mode; this.toast('РЕЖИМ ' + settings.mode + (settings.mode === 'ACRO' ? ': газ держится, углы руками' : ': стабилизация и удержание высоты'), ''); }
+      if (a === 'mode') {
+        this.changeSetting('mode'); $('bMode').textContent = MODE_NAME[settings.mode];
+        this.toast('ПОЛЁТ ' + MODE_NAME[settings.mode] + ({ EASY: ': дрон сам держит скорость и высоту', ANGLE: ': стабилизация, наклоны стиками', ACRO: ': как настоящий FPV, всё руками' })[settings.mode], '');
+      }
+      if (a === 'thermal') { this.setThermal(!this.thermal); this.toast(this.thermal ? 'ТЕПЛОВИЗОР ВКЛ' : 'ТЕПЛОВИЗОР ВЫКЛ', ''); this.audio.beep(this.thermal ? 1600 : 900, 0.05); }
     }
     if (a === 'pause') { if (this.state === 'play') this.pause(true); else if (this.state === 'paused') this.pause(false); }
     if (a === 'restart' && (this.state === 'play' || this.state === 'result')) this.start();
@@ -351,6 +417,12 @@ class Game {
   pause(on) {
     this.state = on ? 'paused' : 'play';
     $('pause').style.display = on ? 'flex' : 'none';
+    if (!on) this.lockMouse();
+  }
+
+  lockMouse() {
+    const l = $('touch');
+    if (!isTouch && l.requestPointerLock && document.pointerLockElement !== l) { try { l.requestPointerLock(); } catch (e) { /* нет */ } }
   }
 
   toMenu() {
@@ -445,7 +517,11 @@ class Game {
     this.perf(dt);
     const now = performance.now() / 1000;
     if (this.state === 'menu') this.menuUpdate(dt, now);
-    else if (this.state === 'play') this.playUpdate(dt, now);
+    else if (this.state === 'play') {
+      // замедление в первые мгновения после подрыва
+      if (!this.drone.alive && this.deadT < 1.0) dt *= 0.35;
+      this.playUpdate(dt, now);
+    }
     else if (this.state === 'result') this.menuUpdate(dt * 0.3, now);
     this.fx.update(this.state === 'paused' ? 0 : dt, this.camera.position);
     this.vehicles.updateWrecks(this.state === 'paused' ? 0 : dt);
@@ -543,7 +619,8 @@ class Game {
       this.signal += (this.sigTarget - this.signal) * Math.min(1, dt * 4);
       // задержка управления при плохом сигнале
       const delay = (1 - this.signal) * 0.25;
-      this.inputQ.push({ t: now, thr: inp.thr, yaw: inp.yaw, pitch: inp.pitch, roll: inp.roll });
+      const dyaw = inp.dyaw || 0;
+      this.inputQ.push({ t: now, thr: inp.thr, yaw: inp.yaw, pitch: inp.pitch, roll: inp.roll, boost: inp.boost });
       while (this.inputQ.length > 1 && this.inputQ[1].t <= now - delay) this.inputQ.shift();
       inp = this.inputQ[0];
       if (this.signal < 0.08) {
@@ -553,6 +630,16 @@ class Game {
       } else this.lostT = 0;
 
       if (d.alive) {
+        if (d.mode === 'EASY') {
+          d.heading -= dyaw;
+          if (!isTouch) d.gimbal = this.input.gimbal;
+          else {
+            // на телефоне камера сама смотрит по траектории
+            const hs = Math.hypot(d.vel.x, d.vel.z);
+            const want = Math.max(-0.9, Math.min(0.25, Math.atan2(d.vel.y, hs + 5) * 0.9 - 0.1));
+            d.gimbal += (want - d.gimbal) * Math.min(1, dt * 2);
+          }
+        }
         const ev = d.update(dt, inp, this.world, this.signal);
         if (!d.armed && d.pos.distanceTo(M.base) > 6) { d.armed = true; if (d.p.warhead) { this.toast('БЧ ВЗВЕДЕНА', ''); this.audio.beep(1400, 0.08); } }
         // техника
@@ -811,7 +898,7 @@ class Game {
     const sp = d.speed() * 3.6;
     const agl = d.pos.y - this.world.heightAt(d.pos.x, d.pos.z);
     const home = d.pos.distanceTo(M.base);
-    txt(`${settings.mode}  ${d.p.name}`, L, top);
+    txt(`${MODE_NAME[settings.mode]}${inp0boost(this) ? ' ▶▶' : ''}  ${d.p.name}${this.thermal ? '  ТПВ' : ''}`, L, top);
     const vCol = d.voltage < 14 ? '#ff5544' : '#fff';
     txt(`${d.voltage.toFixed(1)}V  ${Math.round(d.battery * 100)}%`, L, top + fs * 1.3, 'left', vCol);
     if (d.p.warhead) txt(d.armed ? 'БЧ: ВЗВЕДЕНА' : 'БЧ: НА ПРЕДОХР.', L, top + fs * 2.6, 'left', d.armed ? '#ff6655' : '#9c9');
@@ -874,6 +961,8 @@ class Game {
     c.beginPath(); c.moveTo(px + Math.cos(a) * 6, py + Math.sin(a) * 6); c.lineTo(px + Math.cos(a + 2.5) * 4, py + Math.sin(a + 2.5) * 4); c.lineTo(px + Math.cos(a - 2.5) * 4, py + Math.sin(a - 2.5) * 4); c.fill();
   }
 }
+
+function inp0boost(g) { return g.input.s.boost && g.drone.mode === 'EASY'; }
 
 function boot() {
   try { window.game = new Game(); }

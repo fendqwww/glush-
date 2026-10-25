@@ -5,22 +5,22 @@ export const TYPES = {
   kamikaze: {
     name: 'КАМИКАДЗЕ 7"', desc: 'кумулятивная БЧ, подрыв при ударе', mass: 1.4, twr: 5.2, drag: 0.016, lin: 0.05,
     radius: 0.24, tilt: 28, rates: 0.75, superRate: 0.55, expo: 0.5, crash: 3.5, warhead: 1, drops: 0, battery: 240, color: 0x2a2d2f,
-    blast: 9, dmg: 120, signal: 1,
+    blast: 9, dmg: 120, signal: 1, easy: 24,
   },
   bomber: {
     name: 'БОМБЕР', desc: '4 сброса ВОГ, медленный и устойчивый', mass: 2.6, twr: 3.0, drag: 0.03, lin: 0.12,
     radius: 0.38, tilt: 10, rates: 0.55, superRate: 0.4, expo: 0.5, crash: 7, warhead: 0, drops: 4, battery: 420, color: 0x3b3f2c,
-    blast: 5, dmg: 60, signal: 1,
+    blast: 5, dmg: 60, signal: 1, easy: 14,
   },
   fiber: {
     name: 'ОПТОВОЛОКНО', desc: 'не боится РЭБ, кабель 3 км', mass: 1.7, twr: 4.4, drag: 0.018, lin: 0.06,
     radius: 0.26, tilt: 24, rates: 0.72, superRate: 0.55, expo: 0.5, crash: 3.5, warhead: 1, drops: 0, battery: 300, color: 0x1f2a36,
-    blast: 9, dmg: 120, signal: 0, cable: 3000,
+    blast: 9, dmg: 120, signal: 0, cable: 3000, easy: 22,
   },
   racer: {
     name: 'ГОНОЧНЫЙ 5"', desc: 'без БЧ, бешеная тяга, для гонок', mass: 0.65, twr: 9, drag: 0.012, lin: 0.03,
     radius: 0.17, tilt: 32, rates: 0.9, superRate: 0.62, expo: 0.4, crash: 14, warhead: 0, drops: 0, battery: 200, color: 0x7a1c1c,
-    blast: 0, dmg: 0, signal: 1,
+    blast: 0, dmg: 0, signal: 1, easy: 32,
   },
 };
 
@@ -37,7 +37,9 @@ export class Drone {
     this.vel = new THREE.Vector3();
     this.quat = new THREE.Quaternion();
     this.rate = new THREE.Vector3(); // угловая скорость в осях тела (рад/с): x тангаж, y рыскание, z крен
-    this.mode = 'ANGLE';
+    this.mode = 'EASY';
+    this.gimbal = -0.1;
+    this.lookFly = false;
     this.alive = true;
     this.armed = false;
     this.thrOut = 0;
@@ -79,6 +81,8 @@ export class Drone {
   // вход: thr 0..1, yaw/pitch/roll -1..1; signal 0..1 (задержки и шум снаружи)
   // физика с подшагами: стабильно при любом FPS
   update(dt, inp, world, signal) {
+    // мышь крутит курс сразу, без сглаживания
+    if (inp.dyaw) { this.heading -= inp.dyaw; inp = Object.assign({}, inp, { dyaw: 0 }); }
     const n = Math.min(8, Math.ceil(dt / (1 / 120)));
     let last = null;
     for (let i = 0; i < n; i++) {
@@ -109,11 +113,47 @@ export class Drone {
     sm.yaw += (inp.yaw - sm.yaw) * ks; sm.pitch += (inp.pitch - sm.pitch) * ks; sm.roll += (inp.roll - sm.roll) * ks;
     sm.thr += (inp.thr - sm.thr) * kt;
     const ex = x => x * (0.35 + 0.65 * x * x);
-    inp = { thr: sm.thr, yaw: ex(sm.yaw), pitch: ex(sm.pitch), roll: ex(sm.roll) };
+    inp = { thr: sm.thr, yaw: ex(sm.yaw), pitch: ex(sm.pitch), roll: ex(sm.roll), boost: inp.boost };
     let thr = inp.thr;
     const want = tmpV;
     if (this.mode === 'ACRO') {
       want.set(rc(-inp.pitch, P.rates, P.superRate, P.expo), rc(-inp.yaw, P.rates * 0.8, P.superRate * 0.8, P.expo), rc(-inp.roll, P.rates, P.superRate, P.expo));
+    } else if (this.mode === 'EASY') {
+      // лёгкий режим: стики задают скорость, дрон сам наклоняется, тормозит и держит высоту
+      this.heading -= inp.yaw * 1.8 * dt;
+      const sh = Math.sin(this.heading), ch = Math.cos(this.heading);
+      const speed = P.easy * (inp.boost ? 1.6 : 1);
+      const g0 = this.lookFly ? this.gimbal : 0;
+      // небольшой наклон камеры не уводит дрон вниз
+      const g = Math.sign(g0) * Math.max(0, Math.abs(g0) - 0.12) * 1.1;
+      const fIn = inp.pitch, sIn = inp.roll;
+      const fwdH = fIn * Math.cos(g) * speed, side = sIn * speed * 0.75;
+      // желаемая горизонтальная скорость в мире
+      const vdx = -sh * fwdH + ch * side, vdz = -ch * fwdH - sh * side;
+      // упреждение сопротивления воздуха, чтобы реально выходить на заданную скорость
+      const vdl = Math.hypot(vdx, vdz), dk = (P.drag * vdl + P.lin) / P.mass * 3;
+      let ax = (vdx - this.vel.x) * 1.9 + vdx * dk, az = (vdz - this.vel.z) * 1.9 + vdz * dk;
+      const amax = 9.81 * Math.tan(inp.boost ? 1.3 : 1.1);
+      const al = Math.hypot(ax, az); if (al > amax) { ax *= amax / al; az *= amax / al; }
+      const aF = -sh * ax - ch * az, aR = ch * ax - sh * az;
+      tmpE.set(-Math.atan(aF / 9.81), this.heading, -Math.atan(aR / 9.81), 'YXZ');
+      tmpQ.setFromEuler(tmpE);
+      tmpQ2.copy(this.quat).invert().multiply(tmpQ);
+      if (tmpQ2.w < 0) { tmpQ2.x *= -1; tmpQ2.y *= -1; tmpQ2.z *= -1; tmpQ2.w *= -1; }
+      want.set(tmpQ2.x, tmpQ2.y, tmpQ2.z).multiplyScalar(2 * 6);
+      const wl = want.length(); if (wl > 5) want.multiplyScalar(5 / wl);
+      // вертикаль: вверх/вниз + полёт «куда смотришь»
+      const vIn = (inp.thr - 0.5) * 2;
+      const vzd = fIn * Math.sin(g) * speed + (Math.abs(vIn) < 0.08 ? 0 : vIn) * 7;
+      this.altHold += vzd * dt;
+      const gr = world.heightAt(this.pos.x, this.pos.z) + P.radius;
+      if (this.altHold < gr - 0.5) this.altHold = gr - 0.5;
+      if (this.pos.y > this.altHold + 3) this.altHold = this.pos.y - 3;
+      if (this.pos.y < this.altHold - 3) this.altHold = this.pos.y + 3;
+      const err = this.altHold - this.pos.y;
+      const up = tmpV2.set(0, 1, 0).applyQuaternion(this.quat);
+      const hover = Math.pow(1 / (P.twr * 0.95 * Math.max(0.35, up.y)), 0.625);
+      thr = Math.min(1, Math.max(0, hover + err * 0.12 + (vzd - this.vel.y) * 0.08));
     } else {
       // стабилизация: стики задают углы, газ около центра держит высоту
       const maxTilt = 0.75;
@@ -214,14 +254,15 @@ export class Drone {
     if (vn >= 0) return null;
     const speed = -vn;
     this.impact = speed;
-    if (P.warhead && speed > P.crash && this.armed) return { type: 'detonate', speed };
+    const crashV = this.mode === 'EASY' ? Math.max(P.crash, 8) : P.crash;
+    if (P.warhead && speed > crashV && this.armed) return { type: 'detonate', speed };
     // мягкая посадка на землю
     if (isGround && speed < 2.5 && this.thrOut < 0.25) {
       this.vel.multiplyScalar(0.6);
       this.vel.y = 0;
       return null;
     }
-    if (speed > P.crash * 2.2) return { type: 'crash', speed, reason: 'разбился' };
+    if (speed > crashV * 2.2) return { type: 'crash', speed, reason: 'разбился' };
     this.vel.addScaledVector(n, -vn * 1.35);
     this.vel.multiplyScalar(0.7);
     this.rate.x += (Math.random() - 0.5) * speed * 2;
@@ -245,6 +286,13 @@ export class Drone {
   fpvCamera(cam) {
     tmpV.set(0, 0.04, -this.p.radius * 0.6).applyQuaternion(this.quat);
     cam.position.copy(this.pos).add(tmpV);
+    if (this.mode === 'EASY') {
+      // стабилизированный подвес: горизонт ровный, лёгкий крен для ощущения скорости
+      tmpE.setFromQuaternion(this.quat, 'YXZ');
+      tmpE.set(this.gimbal, this.heading, tmpE.z * 0.3, 'YXZ');
+      cam.quaternion.setFromEuler(tmpE);
+      return;
+    }
     tmpQ.setFromAxisAngle(tmpV2.set(1, 0, 0), this.p.tilt * Math.PI / 180);
     cam.quaternion.copy(this.quat).multiply(tmpQ);
   }
